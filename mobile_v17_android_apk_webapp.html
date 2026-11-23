@@ -1,0 +1,3361 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f172a" />
+    <title>Кузбассразрезуголь · Спутник.Mobile v17</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif']
+                    }
+                }
+            }
+        };
+    </script>
+
+    <!-- Google Font Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+
+    <!-- Leaflet Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        /* ==================== LIQUID GLASS (iOS 26 / OBSIDIAN GLASS) ==================== */
+        .lg-mesh {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .lg-orb {
+            position: absolute;
+            border-radius: 9999px;
+            filter: blur(65px);
+            opacity: 0.42;
+            animation: orbFloat 14s ease-in-out infinite alternate;
+        }
+        .dark .lg-orb { opacity: 0.25; }
+        @keyframes orbFloat {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(28px, -24px) scale(1.12); }
+        }
+
+        .lg-glass {
+            background: rgba(255, 255, 255, 0.78);
+            backdrop-filter: blur(22px) saturate(185%);
+            -webkit-backdrop-filter: blur(22px) saturate(185%);
+            border: 1px solid rgba(255, 255, 255, 0.65);
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.75);
+        }
+        .dark .lg-glass {
+            background: rgba(15, 23, 42, 0.78);
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+
+        .lg-card {
+            background: rgba(255, 255, 255, 0.86);
+            backdrop-filter: blur(18px) saturate(160%);
+            -webkit-backdrop-filter: blur(18px) saturate(160%);
+            border: 1px solid rgba(226, 232, 240, 0.85);
+            box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+        }
+        .dark .lg-card {
+            background: rgba(15, 23, 42, 0.84);
+            border: 1px solid rgba(51, 65, 85, 0.7);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+        }
+
+        /* Инверсия схемы в тёмной теме */
+        .dark .osm-dark-tiles {
+            filter: invert(100%) hue-rotate(180deg) brightness(92%) contrast(88%);
+        }
+
+        /* Скрытие полос прокрутки */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Анимации шторок */
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(22px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-slide-up { animation: slideUp 0.24s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+        /* ==================== МАРКЕРЫ ТЕХНИКИ ==================== */
+        .veh-marker {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            pointer-events: auto;
+            will-change: transform;
+        }
+        .veh-icon-wrap {
+            position: relative;
+            width: 42px;
+            height: 42px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            filter: drop-shadow(0 4px 6px rgba(15, 23, 42, 0.38));
+            transition: transform 0.16s ease;
+        }
+        .veh-marker.selected .veh-icon-wrap {
+            transform: scale(1.22);
+            filter: drop-shadow(0 0 11px rgba(37, 99, 235, 0.85));
+        }
+        .veh-marker.offline .veh-icon-wrap {
+            opacity: 0.58;
+            filter: grayscale(0.75) drop-shadow(0 2px 3px rgba(0,0,0,0.3));
+        }
+        .veh-arrow {
+            position: absolute;
+            bottom: -7px;
+            left: 50%;
+            width: 14px;
+            height: 14px;
+            margin-left: -7px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            will-change: transform;
+        }
+        /* Адаптивные подписи (светлое стекло на схеме, тёмное на спутнике и ночью) */
+        .veh-label {
+            margin-top: 6px;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-size: 11px;
+            font-weight: 800;
+            line-height: 1.3;
+            white-space: nowrap;
+            background: rgba(255, 255, 255, 0.92);
+            color: #0f172a;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(8px);
+        }
+        .dark .veh-label,
+        .sat-mode .veh-label {
+            background: rgba(15, 23, 42, 0.86);
+            color: #f8fafc;
+            border-color: rgba(148, 163, 184, 0.35);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+        }
+        .veh-marker.selected .veh-label {
+            background: #2563eb;
+            color: #ffffff;
+            border-color: #93c5fd;
+        }
+
+        /* Кастомный всплывающий попап на карте */
+        .leaflet-popup-content-wrapper {
+            padding: 0 !important;
+            border-radius: 22px !important;
+            background: rgba(255, 255, 255, 0.92) !important;
+            backdrop-filter: blur(20px) saturate(180%) !important;
+            -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+            box-shadow: 0 14px 36px rgba(15, 23, 42, 0.24) !important;
+            border: 1px solid rgba(255, 255, 255, 0.7) !important;
+            overflow: hidden;
+        }
+        .dark .leaflet-popup-content-wrapper {
+            background: rgba(15, 23, 42, 0.92) !important;
+            border-color: rgba(148, 163, 184, 0.25) !important;
+            color: #f8fafc !important;
+        }
+        .leaflet-popup-content { margin: 0 !important; width: 256px !important; }
+        .leaflet-popup-tip { background: rgba(255, 255, 255, 0.92) !important; }
+        .dark .leaflet-popup-tip { background: rgba(15, 23, 42, 0.92) !important; }
+        .leaflet-popup-close-button { display: none !important; }
+        .leaflet-control-attribution { display: none !important; }
+
+        /* Подписи пользовательских зон */
+        .zone-pin-tooltip {
+            background: rgba(15, 23, 42, 0.88) !important;
+            color: #ffffff !important;
+            border: 1px solid rgba(255, 255, 255, 0.22) !important;
+            border-radius: 9999px !important;
+            padding: 3px 10px !important;
+            font-weight: 800 !important;
+            font-size: 11px !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.32) !important;
+        }
+        .zone-pin-tooltip::before { display: none !important; }
+
+        /* iOS-переключатели */
+        .ios-switch {
+            position: relative;
+            display: inline-block;
+            width: 48px;
+            height: 28px;
+            flex-shrink: 0;
+        }
+        .ios-switch input { opacity: 0; width: 0; height: 0; }
+        .ios-slider {
+            position: absolute;
+            cursor: pointer;
+            inset: 0;
+            background-color: #cbd5e1;
+            transition: 0.22s;
+            border-radius: 9999px;
+        }
+        .dark .ios-slider { background-color: #334155; }
+        .ios-slider:before {
+            position: absolute;
+            content: "";
+            height: 22px;
+            width: 22px;
+            left: 3px;
+            bottom: 3px;
+            background-color: #ffffff;
+            transition: 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+            border-radius: 50%;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.22);
+        }
+        .ios-switch input:checked + .ios-slider { background-color: #22c55e; }
+        .ios-switch input:checked + .ios-slider:before { transform: translateX(20px); }
+
+        /* Перетаскивание плиток избранного */
+        .fav-tile {
+            touch-action: pan-x;
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+        }
+        .fav-tile.fav-dragging {
+            transform: scale(1.12);
+            box-shadow: 0 12px 26px rgba(37, 99, 235, 0.38);
+            z-index: 50;
+            opacity: 0.96;
+        }
+
+        /* Плавающий Dock со скользящим индикатором */
+        #nav-pill {
+            transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        /* Свайп-шторки */
+        .swipe-sheet {
+            transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+            will-change: transform;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 h-full w-full relative overflow-hidden">
+
+    <!-- ==================== ЭКРАН 1: КАРТА ==================== -->
+    <div id="tab-map" class="relative w-full h-full">
+        <div id="map" class="w-full h-full z-0 bg-slate-200 dark:bg-slate-900"></div>
+
+        <!-- Верхняя панель: Поиск + Обновить + Счётчик парка -->
+        <div class="absolute top-3 left-3 right-3 z-[420] flex flex-col gap-2 pointer-events-none">
+            <div class="flex items-center gap-2 pointer-events-auto">
+                <!-- Живой поиск техники -->
+                <div class="relative flex-1">
+                    <div class="lg-glass rounded-full flex items-center px-3.5 h-11">
+                        <svg class="w-4 h-4 text-slate-400 mr-2 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+                        </svg>
+                        <input id="mapSearchInput" type="text" placeholder="Поиск техники..." autocomplete="off"
+                            class="w-full bg-transparent text-sm font-medium outline-none placeholder-slate-400 dark:placeholder-slate-500" />
+                        <button id="mapSearchClear" class="hidden text-slate-400 hover:text-slate-600 p-1">✕</button>
+                    </div>
+                    <div id="mapSearchDropdown" class="hidden absolute top-12 left-0 right-0 lg-glass rounded-2xl max-h-64 overflow-y-auto divide-y divide-slate-200/60 dark:divide-slate-700/60 z-50"></div>
+                </div>
+
+                <!-- Кнопка ручного обновления -->
+                <button id="btnRefresh" class="lg-glass w-11 h-11 rounded-full flex items-center justify-center shrink-0 active:scale-95 transition-transform" title="Обновить">
+                    <svg id="refreshIcon" class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" stroke-width="2.3" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                </button>
+
+                <!-- Счётчик парка (открывает Сводку парка и очередей) -->
+                <button id="btnOnlineBadge" class="bg-emerald-500/95 hover:bg-emerald-600 text-white px-3.5 h-11 rounded-full shadow-lg flex items-center gap-1.5 font-extrabold text-sm shrink-0 active:scale-95 transition-transform" title="Сводка парка и очереди">
+                    <span id="statusBadgeIcon" class="text-xs leading-none">●</span>
+                    <span id="onlineCountBadge">0</span>
+                </button>
+            </div>
+
+            <!-- Горизонтальная лента избранного (Drag & Drop по долгому тапу) -->
+            <div id="favoritesStrip" class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 pointer-events-auto"></div>
+
+            <!-- Конструктор пользовательских зон (Круг / Контур + 6 цветов) -->
+            <div id="zoneDrawBar" class="hidden lg-glass rounded-3xl p-3 flex flex-col gap-2.5 pointer-events-auto animate-slide-up">
+                <div class="flex items-center justify-between gap-2">
+                    <div class="grid grid-cols-2 gap-1 p-0.5 rounded-xl bg-slate-200/80 dark:bg-slate-800 text-xs font-bold">
+                        <button id="btnZoneModeCircle" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white transition">⭕ Круг</button>
+                        <button id="btnZoneModePoly" class="px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 transition">⬠ Контур</button>
+                    </div>
+                    <div class="flex items-center gap-1.5" id="zoneColorPicker">
+                        <button data-color="#9333EA" class="z-color w-5 h-5 rounded-full bg-purple-600 ring-2 ring-offset-1 ring-slate-900 dark:ring-white"></button>
+                        <button data-color="#2563EB" class="z-color w-5 h-5 rounded-full bg-blue-600"></button>
+                        <button data-color="#16A34A" class="z-color w-5 h-5 rounded-full bg-green-600"></button>
+                        <button data-color="#EA580C" class="z-color w-5 h-5 rounded-full bg-orange-600"></button>
+                        <button data-color="#DC2626" class="z-color w-5 h-5 rounded-full bg-red-600"></button>
+                        <button data-color="#0891B2" class="z-color w-5 h-5 rounded-full bg-cyan-600"></button>
+                    </div>
+                </div>
+
+                <div id="zoneRadiusWrap" class="flex items-center gap-2 text-xs font-bold">
+                    <span class="text-slate-500 dark:text-slate-400 shrink-0">Радиус:</span>
+                    <input id="zoneRadiusSlider" type="range" min="20" max="500" step="10" value="120" class="flex-1 accent-blue-600 h-1.5 rounded-lg" />
+                    <span id="zoneRadiusVal" class="w-12 text-right text-blue-600 dark:text-blue-400">120 м</span>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2">
+                    <input id="zoneNameInput" type="text" placeholder="Название зоны (напр. Отвал 2)" class="flex-1 min-w-[130px] px-3 py-1.5 rounded-xl bg-white/85 dark:bg-slate-800 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500" />
+                    <span id="zonePtsCount" class="text-[11px] font-bold text-blue-600 dark:text-blue-400">Тап по центру</span>
+                    <button id="btnZoneUndo" class="hidden px-2.5 py-1.5 rounded-xl bg-slate-200/90 dark:bg-slate-700 text-xs font-bold active:scale-95 transition">↩ Назад</button>
+                    <button id="btnZoneSave" class="px-3 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-bold active:scale-95 transition">Сохранить</button>
+                    <button id="btnZoneCancel" class="px-2.5 py-1.5 rounded-xl bg-rose-500/15 text-rose-600 dark:text-rose-400 text-xs font-bold active:scale-95 transition">✕</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Правая вертикальная панель инструментов под одну руку -->
+        <div class="absolute right-3 top-1/2 -translate-y-1/2 z-[410] flex flex-col gap-2">
+            <button id="btnToggleLayer" class="lg-glass w-12 h-12 rounded-2xl flex flex-col items-center justify-center gap-0.5 active:scale-95 transition">
+                <span class="text-base leading-none">🌐</span>
+                <span id="layerToggleText" class="text-[9.5px] font-extrabold">Спутн.</span>
+            </button>
+            <button id="btnMapFilter" class="lg-glass w-12 h-12 rounded-2xl flex flex-col items-center justify-center gap-0.5 active:scale-95 transition relative">
+                <span class="text-base leading-none">🎛️</span>
+                <span class="text-[9.5px] font-extrabold">Фильтр</span>
+                <span id="filterActiveDot" class="hidden absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-600"></span>
+            </button>
+            <button id="btnFitAll" class="lg-glass w-12 h-12 rounded-2xl flex flex-col items-center justify-center gap-0.5 active:scale-95 transition">
+                <span class="text-base leading-none">⛶</span>
+                <span class="text-[9.5px] font-extrabold">Все</span>
+            </button>
+            <button id="btnMyLoc" class="lg-glass w-12 h-12 rounded-2xl flex flex-col items-center justify-center gap-0.5 active:scale-95 transition">
+                <span class="text-base leading-none text-blue-600 dark:text-blue-400">➤</span>
+                <span class="text-[9.5px] font-extrabold">Я</span>
+            </button>
+            <button id="btnQuickZones" class="lg-glass w-12 h-12 rounded-2xl flex flex-col items-center justify-center gap-0.5 active:scale-95 transition">
+                <span class="text-base leading-none text-purple-600 dark:text-purple-400">✏️</span>
+                <span class="text-[9.5px] font-extrabold">Зона</span>
+            </button>
+        </div>
+
+        <!-- Панель воспроизведения истории маршрута (Плеер v17) -->
+        <div id="trackPlaybackBar" class="hidden absolute left-3 right-3 bottom-[84px] z-[430] lg-glass rounded-3xl p-3 animate-slide-up">
+            <div class="flex items-center justify-between gap-2 mb-2">
+                <div class="min-w-0">
+                    <div id="trackTitle" class="text-xs font-extrabold truncate">Маршрут</div>
+                    <div id="trackStats" class="text-[10.5px] text-slate-500 dark:text-slate-400 font-semibold">0 км · 0 рейсов · 0 стоянок</div>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <button id="btnTrackFollow" class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs shadow active:scale-90 transition" title="Следить за точкой">🎯</button>
+                    <button id="btnTrackPlay" class="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs shadow active:scale-90 transition" title="Воспроизвести">▶</button>
+                    <button id="btnTrackSpeed" class="px-2 h-8 rounded-full bg-slate-200/85 dark:bg-slate-700 text-[11px] font-extrabold active:scale-90 transition">1x</button>
+                    <button id="btnTrackClose" class="w-8 h-8 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center text-xs font-bold active:scale-90 transition">✕</button>
+                </div>
+            </div>
+            <!-- 4 мини-карточки статистики трека -->
+            <div class="grid grid-cols-4 gap-1.5 mb-2 text-center">
+                <div class="rounded-xl py-1 px-1 bg-slate-100/80 dark:bg-slate-800/80">
+                    <div class="text-[8.5px] font-bold uppercase text-slate-400">Пробег</div>
+                    <div id="trStatDist" class="text-[11px] font-black">0 км</div>
+                </div>
+                <div class="rounded-xl py-1 px-1 bg-blue-500/15">
+                    <div class="text-[8.5px] font-bold uppercase text-blue-600 dark:text-blue-400">Рейсы</div>
+                    <div id="trStatTrips" class="text-[11px] font-black text-blue-700 dark:text-blue-300">0</div>
+                </div>
+                <div class="rounded-xl py-1 px-1 bg-emerald-500/15">
+                    <div class="text-[8.5px] font-bold uppercase text-emerald-600 dark:text-emerald-400">Макс</div>
+                    <div id="trStatMax" class="text-[11px] font-black text-emerald-700 dark:text-emerald-300">0 км/ч</div>
+                </div>
+                <div class="rounded-xl py-1 px-1 bg-amber-500/15">
+                    <div class="text-[8.5px] font-bold uppercase text-amber-600 dark:text-amber-400">Стоянки</div>
+                    <div id="trStatStops" class="text-[11px] font-black text-amber-700 dark:text-amber-300">0</div>
+                </div>
+            </div>
+            <!-- Легенда скорости + таймлайн -->
+            <div class="flex items-center gap-3 text-[9.5px] font-bold text-slate-500 dark:text-slate-400 mb-1.5">
+                <span class="flex items-center gap-1"><span class="w-2.5 h-1 rounded bg-emerald-500 inline-block"></span>&lt;40 км/ч</span>
+                <span class="flex items-center gap-1"><span class="w-2.5 h-1 rounded bg-orange-500 inline-block"></span>40–70</span>
+                <span class="flex items-center gap-1"><span class="w-2.5 h-1 rounded bg-red-500 inline-block"></span>&gt;70 км/ч</span>
+                <span class="ml-auto">⛏️ Погрузка · 🅿️ Стоянка</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span id="trackCurrTime" class="text-[11px] font-mono font-bold text-blue-600 dark:text-blue-400 w-14">--:--:--</span>
+                <input id="trackSlider" type="range" min="0" max="100" value="0" class="flex-1 accent-blue-600 h-1.5 rounded-lg cursor-pointer" />
+                <span id="trackCurrSpeed" class="text-[11px] font-bold w-14 text-right">0 км/ч</span>
+            </div>
+        </div>
+
+        <!-- Компактная нижняя панель выбранного объекта (follow-bar) -->
+        <div id="selectedCard" class="hidden absolute left-3 right-3 bottom-[84px] z-[425] lg-glass rounded-3xl p-3.5 animate-slide-up">
+            <div class="flex items-center justify-between gap-2 mb-2.5">
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-1.5">
+                        <span id="cardStatusDot" class="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+                        <span id="cardEmoji" class="text-base leading-none">🚛</span>
+                        <h3 id="cardName" class="text-[15px] font-extrabold truncate">Белаз 279</h3>
+                    </div>
+                    <div class="flex items-center gap-1.5 mt-0.5 text-[11.5px] text-slate-500 dark:text-slate-400 font-medium">
+                        <span id="cardTime">--:--:--</span>
+                        <span id="cardZoneInfo" class="truncate text-blue-600 dark:text-blue-400 font-bold"></span>
+                        <span id="cardDistInfo" class="shrink-0 text-emerald-600 dark:text-emerald-400 font-bold"></span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <button id="btnCardFollow" class="w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center shadow active:scale-90 transition" title="Вести объект">🎯</button>
+                    <button id="btnCardFav" class="w-9 h-9 rounded-full bg-amber-500/15 text-amber-500 text-base flex items-center justify-center active:scale-90 transition" title="В избранное">★</button>
+                    <button id="btnCardMenu" class="w-9 h-9 rounded-full bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold flex items-center justify-center active:scale-90 transition" title="Меню">⋯</button>
+                    <button id="btnCardClose" class="w-9 h-9 rounded-full bg-slate-200/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center justify-center active:scale-90 transition" title="Закрыть">✕</button>
+                </div>
+            </div>
+
+            <!-- Блок для самосвалов и техники -->
+            <div id="cardBodyVehicle" class="space-y-2">
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="rounded-2xl px-2.5 py-2 bg-amber-500/15 border border-amber-500/25 flex items-center gap-1.5">
+                        <span class="text-base">⛽</span>
+                        <div class="min-w-0">
+                            <div class="text-[9px] font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-400">Топливо</div>
+                            <div id="cardFuel" class="text-xs font-black truncate text-amber-950 dark:text-amber-100">—</div>
+                        </div>
+                    </div>
+                    <div class="rounded-2xl px-2.5 py-2 bg-indigo-500/15 border border-indigo-500/25 flex items-center gap-1.5">
+                        <span class="text-base">⚖️</span>
+                        <div class="min-w-0">
+                            <div id="cardWeightLabel" class="text-[9px] font-extrabold uppercase tracking-wider text-indigo-700 dark:text-indigo-400">Вес</div>
+                            <div id="cardWeight" class="text-xs font-black truncate text-indigo-950 dark:text-indigo-100">0 т</div>
+                        </div>
+                    </div>
+                    <div class="rounded-2xl px-2.5 py-2 bg-emerald-500/15 border border-emerald-500/25 flex items-center gap-1.5">
+                        <span class="text-base">⚡</span>
+                        <div class="min-w-0">
+                            <div class="text-[9px] font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Скорость</div>
+                            <div id="cardSpeed" class="text-xs font-black truncate text-emerald-950 dark:text-emerald-100">0 км/ч</div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Смена, Рейсы и Живой пробег -->
+                <div class="rounded-2xl px-3 py-1.5 bg-blue-500/10 border border-blue-500/20 flex items-center justify-between text-xs font-bold">
+                    <div class="flex items-center gap-1.5">
+                        <span>🚛</span>
+                        <span id="cardShiftLabel" class="text-[10.5px] uppercase text-blue-700 dark:text-blue-400 font-extrabold">Рейсы (№1)</span>
+                        <span id="cardTrips" class="text-blue-950 dark:text-blue-100 font-black ml-1">0</span>
+                    </div>
+                    <div class="h-3.5 w-px bg-blue-500/25"></div>
+                    <div class="flex items-center gap-1.5">
+                        <span>🛣️</span>
+                        <span class="text-[10.5px] uppercase text-blue-700 dark:text-blue-400 font-extrabold">Пробег</span>
+                        <span id="cardMileage" class="text-blue-950 dark:text-blue-100 font-black ml-1">0.0 км</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Блок для экскаваторов: Очередь + Скорость -->
+            <div id="cardBodyExcavator" class="hidden grid grid-cols-12 gap-2">
+                <button id="btnCardExcQueue" class="col-span-8 rounded-2xl px-3 py-2 bg-orange-500/15 hover:bg-orange-500/25 border border-orange-500/25 flex items-center gap-2 text-left active:scale-[0.98] transition">
+                    <span class="text-lg">🚛</span>
+                    <div class="min-w-0">
+                        <div id="cardExcQueueTitle" class="text-[9.5px] font-extrabold uppercase tracking-wider text-orange-700 dark:text-orange-400">Очередь (60 м)</div>
+                        <div id="cardExcQueueVal" class="text-xs font-black truncate text-orange-950 dark:text-orange-100">0 шт. · ср 0 с / макс 0 с</div>
+                    </div>
+                </button>
+                <div class="col-span-4 rounded-2xl px-2.5 py-2 bg-emerald-500/15 border border-emerald-500/25 flex items-center gap-1.5">
+                    <span class="text-base">⚡</span>
+                    <div class="min-w-0">
+                        <div class="text-[9px] font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Скорость</div>
+                        <div id="cardExcSpeed" class="text-xs font-black truncate text-emerald-950 dark:text-emerald-100">0 км/ч</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== ЭКРАН 2: ОБЪЕКТЫ ==================== -->
+    <div id="tab-objects" class="hidden relative w-full h-full flex flex-col bg-slate-100 dark:bg-slate-950 pb-[84px]">
+        <div class="lg-mesh">
+            <div class="lg-orb w-64 h-64 bg-blue-400 -top-20 -left-16"></div>
+            <div class="lg-orb w-56 h-56 bg-cyan-400 top-40 -right-16"></div>
+        </div>
+
+        <div class="relative z-10 lg-glass border-b border-slate-200/70 dark:border-slate-800 px-4 pt-4 pb-3 shrink-0">
+            <div class="flex items-center justify-between mb-2.5 gap-2">
+                <h1 class="text-lg font-black tracking-tight truncate">Объекты <span id="objListHeaderCount" class="text-blue-600 dark:text-blue-400">(0)</span></h1>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <button id="btnObjFilterModal" class="relative px-2.5 py-1 rounded-full bg-white/85 dark:bg-slate-800 text-xs font-extrabold flex items-center gap-1 shadow-sm active:scale-95 transition">
+                        <span>🎛️</span>
+                        <span>Выбор типов</span>
+                        <span id="objFilterActiveDot" class="hidden w-2 h-2 rounded-full bg-blue-600"></span>
+                    </button>
+                    <span id="objModeBadge" class="text-[11px] font-extrabold px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">Live</span>
+                </div>
+            </div>
+
+            <div class="relative mb-2.5">
+                <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                    <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+                </svg>
+                <input id="objSearchInput" type="text" placeholder="Номер БелАЗа, экскаватор, адрес..."
+                    class="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-white/80 dark:bg-slate-800/80 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+
+            <!-- Быстрые фильтры по типам -->
+            <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar mb-2 text-xs font-bold">
+                <button data-type="all" class="type-filter shrink-0 px-3 py-1.5 rounded-full bg-blue-600 text-white transition">Все <span data-cnt="all" class="opacity-80"></span></button>
+                <button data-type="fav" class="type-filter shrink-0 px-3 py-1.5 rounded-full bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition">⭐ Избранные <span data-cnt="fav" class="opacity-75"></span></button>
+                <button data-type="belaz" class="type-filter shrink-0 px-3 py-1.5 rounded-full bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition">🚛 БелАЗы <span data-cnt="belaz" class="opacity-75"></span></button>
+                <button data-type="excavator" class="type-filter shrink-0 px-3 py-1.5 rounded-full bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition">⛏️ Экскаваторы <span data-cnt="excavator" class="opacity-75"></span></button>
+                <button data-type="bulldozer" class="type-filter shrink-0 px-3 py-1.5 rounded-full bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition">🚜 Бульдозеры <span data-cnt="bulldozer" class="opacity-75"></span></button>
+                <button data-type="grader" class="type-filter shrink-0 px-3 py-1.5 rounded-full bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition">🚧 Грейдеры <span data-cnt="grader" class="opacity-75"></span></button>
+                <button data-type="fuel" class="type-filter shrink-0 px-3 py-1.5 rounded-full bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition">⛽ Заправки <span data-cnt="fuel" class="opacity-75"></span></button>
+                <button data-type="other" class="type-filter shrink-0 px-3 py-1.5 rounded-full bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition">🚗 Прочие <span data-cnt="other" class="opacity-75"></span></button>
+            </div>
+
+            <!-- Фильтры связи и движения -->
+            <div class="grid grid-cols-2 gap-1.5">
+                <div class="grid grid-cols-3 gap-0.5 p-0.5 rounded-xl bg-slate-200/70 dark:bg-slate-800 text-[11px] font-bold">
+                    <button data-conn="all" class="conn-filter py-1.5 rounded-lg bg-blue-600 text-white transition">Все</button>
+                    <button data-conn="online" class="conn-filter py-1.5 rounded-lg text-slate-600 dark:text-slate-300 transition">Сеть</button>
+                    <button data-conn="offline" class="conn-filter py-1.5 rounded-lg text-slate-600 dark:text-slate-300 transition">Нет</button>
+                </div>
+                <div class="grid grid-cols-3 gap-0.5 p-0.5 rounded-xl bg-slate-200/70 dark:bg-slate-800 text-[11px] font-bold">
+                    <button data-act="all" class="act-filter py-1.5 rounded-lg bg-blue-600 text-white transition">Все</button>
+                    <button data-act="moving" class="act-filter py-1.5 rounded-lg text-slate-600 dark:text-slate-300 transition">Едут</button>
+                    <button data-act="stopped" class="act-filter py-1.5 rounded-lg text-slate-600 dark:text-slate-300 transition">Стоят</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="objectsListContainer" class="relative z-10 flex-1 overflow-y-auto px-3 py-2 space-y-1.5"></div>
+    </div>
+
+    <!-- ==================== ЭКРАН 3: НАСТРОЙКИ ==================== -->
+    <div id="tab-settings" class="hidden relative w-full h-full overflow-y-auto bg-slate-100 dark:bg-slate-950 px-4 pt-5 pb-[96px]">
+        <div class="lg-mesh">
+            <div class="lg-orb w-72 h-72 bg-blue-500 -top-24 -right-20"></div>
+            <div class="lg-orb w-64 h-64 bg-indigo-500 bottom-20 -left-24"></div>
+        </div>
+
+        <div class="relative z-10 max-w-lg mx-auto">
+            <!-- Брендинг «КУЗБАССРАЗРЕЗУГОЛЬ» -->
+            <div class="flex flex-col items-center text-center mb-5">
+                <div class="w-16 h-16 rounded-2xl lg-card flex items-center justify-center mb-2.5">
+                    <svg viewBox="0 0 64 64" class="w-11 h-11">
+                        <polygon points="8,50 28,14 44,50" class="fill-slate-900 dark:fill-slate-100"/>
+                        <polygon points="24,50 42,18 58,50" fill="#2563EB" opacity="0.92"/>
+                    </svg>
+                </div>
+                <h1 class="text-lg font-black tracking-tight uppercase">Кузбассразрезуголь</h1>
+                <p class="text-xs text-slate-500 dark:text-slate-400 font-semibold">Спутник.Mobile v17 · Liquid Glass</p>
+            </div>
+
+            <!-- Подключение к серверу (вшитые данные) -->
+            <div class="lg-card rounded-3xl p-4 mb-4 space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Сервер (.asmx)</label>
+                    <input id="cfgServer" type="url" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100/90 dark:bg-slate-800/90 text-xs font-mono font-medium outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Логин</label>
+                        <input id="cfgLogin" type="text" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100/90 dark:bg-slate-800/90 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Пароль</label>
+                        <input id="cfgPassword" type="password" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100/90 dark:bg-slate-800/90 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                </div>
+                <button id="btnConnect" class="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold text-sm shadow-lg shadow-blue-600/25 transition">
+                    Подключить к серверу
+                </button>
+                <!-- Телеметрия производительности v17 -->
+                <div id="perf-line" class="text-[11px] font-mono text-center text-slate-500 dark:text-slate-400 pt-1">
+                    Сеть: — мс · Парсинг: — мс · 0 КБ · 60 FPS
+                </div>
+            </div>
+
+            <!-- Движок 60 FPS, плавность и интервалы -->
+            <div class="lg-card rounded-3xl p-4 mb-4 space-y-4">
+                <h2 class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Обновление и плавность (v17)</h2>
+
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <div class="text-sm font-bold">Автообновление</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">Обновлять позиции в фоне</div>
+                    </div>
+                    <label class="ios-switch"><input id="setAutoRefresh" type="checkbox" /><span class="ios-slider"></span></label>
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">Интервал всего парка</div>
+                    <div class="grid grid-cols-5 gap-1 p-1 rounded-2xl bg-slate-100 dark:bg-slate-800 text-xs font-bold">
+                        <button data-interval="1" class="int-btn py-2 rounded-xl transition">1 сек</button>
+                        <button data-interval="3" class="int-btn py-2 rounded-xl transition">3 сек</button>
+                        <button data-interval="5" class="int-btn py-2 rounded-xl transition">5 сек</button>
+                        <button data-interval="10" class="int-btn py-2 rounded-xl transition">10 сек</button>
+                        <button data-interval="30" class="int-btn py-2 rounded-xl transition">30 сек</button>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">Интервал выбранной машины (only=ID)</div>
+                    <div class="grid grid-cols-4 gap-1 p-1 rounded-2xl bg-slate-100 dark:bg-slate-800 text-xs font-bold">
+                        <button data-selint="1" class="selint-btn py-2 rounded-xl transition">1 сек</button>
+                        <button data-selint="2" class="selint-btn py-2 rounded-xl transition">2 сек</button>
+                        <button data-selint="3" class="selint-btn py-2 rounded-xl transition">3 сек</button>
+                        <button data-selint="5" class="selint-btn py-2 rounded-xl transition">5 сек</button>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">Частота кадров анимации</div>
+                    <div class="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-slate-100 dark:bg-slate-800 text-xs font-bold">
+                        <button data-fps="30" class="fps-btn py-2 rounded-xl transition">30 к/с (экономия)</button>
+                        <button data-fps="60" class="fps-btn py-2 rounded-xl transition">60 к/с (плавно)</button>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <div class="text-sm font-bold">Плавное движение маркеров</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">Экспоненциальное сглаживание (tau 0.42 с)</div>
+                    </div>
+                    <label class="ios-switch"><input id="setSmooth" type="checkbox" /><span class="ios-slider"></span></label>
+                </div>
+
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <div class="text-sm font-bold">Прогноз движения (упреждение)</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">Продление по скорости и курсу до 2.4 с</div>
+                    </div>
+                    <label class="ios-switch"><input id="setPredict" type="checkbox" /><span class="ios-slider"></span></label>
+                </div>
+            </div>
+
+            <!-- Карта, зоны и доступность -->
+            <div class="lg-card rounded-3xl p-4 mb-4 space-y-4">
+                <h2 class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Карта, зоны и интерфейс</h2>
+
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <div class="text-sm font-bold">Вести выбранный объект</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">Плавное слежение с паузой 6 с при сдвиге</div>
+                    </div>
+                    <label class="ios-switch"><input id="setFollow" type="checkbox" /><span class="ios-slider"></span></label>
+                </div>
+
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <div class="text-sm font-bold">Подписи и скорость на карте</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">Автоскрытие при отдалении (zoom &lt; 12)</div>
+                    </div>
+                    <label class="ios-switch"><input id="setLabels" type="checkbox" /><span class="ios-slider"></span></label>
+                </div>
+
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <div class="text-sm font-bold">Геозоны (GetZonesMobile)</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">Отображать участки и базы с сервера</div>
+                    </div>
+                    <label class="ios-switch"><input id="setGeoZones" type="checkbox" /><span class="ios-slider"></span></label>
+                </div>
+
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <div class="text-sm font-bold">Зоны экскаваторов и заправок</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">Динамические круги контроля очередей</div>
+                    </div>
+                    <label class="ios-switch"><input id="setExcZones" type="checkbox" /><span class="ios-slider"></span></label>
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">Радиус зон экскаваторов и АТЗ</div>
+                    <div class="grid grid-cols-4 gap-1 p-1 rounded-2xl bg-slate-100 dark:bg-slate-800 text-xs font-bold">
+                        <button data-radius="40" class="rad-btn py-2 rounded-xl transition">40 м</button>
+                        <button data-radius="60" class="rad-btn py-2 rounded-xl transition">60 м</button>
+                        <button data-radius="100" class="rad-btn py-2 rounded-xl transition">100 м</button>
+                        <button data-radius="150" class="rad-btn py-2 rounded-xl transition">150 м</button>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">Размер интерфейса (масштаб)</div>
+                    <div class="grid grid-cols-5 gap-1 p-1 rounded-2xl bg-slate-100 dark:bg-slate-800 text-xs font-bold">
+                        <button data-scale="1" class="scale-btn py-2 rounded-xl transition">100%</button>
+                        <button data-scale="1.12" class="scale-btn py-2 rounded-xl transition">112%</button>
+                        <button data-scale="1.25" class="scale-btn py-2 rounded-xl transition">125%</button>
+                        <button data-scale="1.38" class="scale-btn py-2 rounded-xl transition">138%</button>
+                        <button data-scale="1.5" class="scale-btn py-2 rounded-xl transition">150%</button>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <div class="text-sm font-bold">Показывать «Нет связи»</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">Отображать неактивные маркеры</div>
+                    </div>
+                    <label class="ios-switch"><input id="setShowOffline" type="checkbox" /><span class="ios-slider"></span></label>
+                </div>
+
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <div class="text-sm font-bold">Тёмная тема (Obsidian Glass)</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">Комфортный ночной режим в кабине</div>
+                    </div>
+                    <label class="ios-switch"><input id="setDarkTheme" type="checkbox" /><span class="ios-slider"></span></label>
+                </div>
+
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <div class="text-sm font-bold">Автовход при запуске</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">Сразу подключаться и открывать карту</div>
+                    </div>
+                    <label class="ios-switch"><input id="setAutoLogin" type="checkbox" /><span class="ios-slider"></span></label>
+                </div>
+
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <div class="text-sm font-bold">Демо-симуляция карьера (623 ед.)</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">Автоматически при блокировке CORS в браузере</div>
+                    </div>
+                    <label class="ios-switch"><input id="setDemoMode" type="checkbox" /><span class="ios-slider"></span></label>
+                </div>
+            </div>
+
+            <!-- Журнал подключения -->
+            <div class="lg-card rounded-3xl p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Журнал подключения</h2>
+                    <button id="btnCopyLogs" class="text-xs font-bold text-blue-600 dark:text-blue-400 active:opacity-60">Копировать</button>
+                </div>
+                <pre id="connectionLog" class="bg-slate-950 text-emerald-400 text-[11px] font-mono p-3 rounded-2xl h-36 overflow-y-auto whitespace-pre-wrap leading-relaxed"></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== ПЛАВАЮЩИЙ DOCK С АНИМИРОВАННЫМ ИНДИКАТОРОМ ==================== -->
+    <nav id="bottomDock" class="fixed bottom-3 left-3 right-3 z-[500] max-w-md mx-auto">
+        <div class="lg-glass rounded-[28px] p-1.5 relative grid grid-cols-3 items-center">
+            <!-- Скользящий индикатор -->
+            <div id="nav-pill" class="absolute top-1.5 bottom-1.5 left-1.5 w-[calc(33.333%-4px)] rounded-[22px] bg-blue-600/15 dark:bg-blue-500/25 border border-blue-500/25 pointer-events-none"></div>
+
+            <button data-tab="map" class="nav-btn relative z-10 flex flex-col items-center justify-center py-1.5 text-blue-600 dark:text-blue-400 transition">
+                <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" stroke-width="2.1" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+                <span class="text-[11px] font-extrabold">Карта</span>
+            </button>
+            <button data-tab="objects" class="nav-btn relative z-10 flex flex-col items-center justify-center py-1.5 text-slate-500 dark:text-slate-400 transition">
+                <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" stroke-width="2.1" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+                <span class="text-[11px] font-extrabold">Объекты</span>
+            </button>
+            <button data-tab="settings" class="nav-btn relative z-10 flex flex-col items-center justify-center py-1.5 text-slate-500 dark:text-slate-400 transition">
+                <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" stroke-width="2.1" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
+                <span class="text-[11px] font-extrabold">Настройки</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- ==================== ШТОРКА 1: МЕНЮ ДЕЙСТВИЙ ==================== -->
+    <div id="actionSheetModal" class="modal-backdrop hidden fixed inset-0 z-[600] bg-slate-950/55 backdrop-blur-sm flex items-end justify-center p-2">
+        <div class="swipe-sheet w-full max-w-md lg-glass rounded-[28px] p-4 animate-slide-up">
+            <div class="swipe-handle w-11 h-1.5 rounded-full bg-slate-400/70 mx-auto mb-3 cursor-grab"></div>
+            <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-300/60 dark:border-slate-700">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <span id="actSheetEmoji" class="text-2xl">🚛</span>
+                    <div class="min-w-0">
+                        <h3 id="actSheetTitle" class="text-base font-extrabold truncate">Белаз</h3>
+                        <p id="actSheetSub" class="text-xs text-slate-500 dark:text-slate-400 font-medium">0 км/ч · --:--:--</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button id="btnActFav" class="w-9 h-9 rounded-full bg-amber-500/15 text-amber-500 text-lg flex items-center justify-center active:scale-90 transition">★</button>
+                    <button id="btnActClose" class="w-9 h-9 rounded-full bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center active:scale-90 transition">✕</button>
+                </div>
+            </div>
+            <div class="space-y-2">
+                <button id="btnActHistory" class="w-full p-3.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-3 text-left active:scale-[0.99] transition shadow-md">
+                    <span class="text-xl">🗺️</span>
+                    <div>
+                        <div class="text-sm font-extrabold">История маршрута</div>
+                        <div class="text-[11px] text-blue-100">Трек, рейсы, погрузки, стоянки и плеер</div>
+                    </div>
+                </button>
+                <button id="btnActInfo" class="w-full p-3.5 rounded-2xl bg-white/90 dark:bg-slate-800/90 flex items-center gap-3 text-left active:scale-[0.99] transition">
+                    <span class="text-xl">ℹ️</span>
+                    <div>
+                        <div class="text-sm font-extrabold">Информация и датчики</div>
+                        <div class="text-[11px] text-slate-500 dark:text-slate-400">Топливо, вес, геозоны и все поля сервера</div>
+                    </div>
+                </button>
+                <button id="btnActCopyCoords" class="w-full p-3.5 rounded-2xl bg-white/90 dark:bg-slate-800/90 flex items-center gap-3 text-left active:scale-[0.99] transition">
+                    <span class="text-xl">📋</span>
+                    <div>
+                        <div class="text-sm font-extrabold">Скопировать координаты</div>
+                        <div id="actSheetCoords" class="text-[11px] font-mono text-slate-500 dark:text-slate-400">54.248687, 86.153297</div>
+                    </div>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== ШТОРКА 2: ИСТОРИЯ МАРШРУТА ==================== -->
+    <div id="historyModal" class="modal-backdrop hidden fixed inset-0 z-[610] bg-slate-950/55 backdrop-blur-sm flex items-end justify-center p-2">
+        <div class="swipe-sheet w-full max-w-md lg-glass rounded-[28px] p-4 animate-slide-up">
+            <div class="swipe-handle w-11 h-1.5 rounded-full bg-slate-400/70 mx-auto mb-3 cursor-grab"></div>
+            <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-300/60 dark:border-slate-700">
+                <div>
+                    <h3 class="text-base font-extrabold">История маршрута</h3>
+                    <p id="histObjName" class="text-xs text-slate-500 dark:text-slate-400 font-semibold">Белаз</p>
+                </div>
+                <button id="btnHistClose" class="w-9 h-9 rounded-full bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center active:scale-90 transition">✕</button>
+            </div>
+
+            <div class="grid grid-cols-4 gap-1.5 mb-3">
+                <button data-preset="3h" class="hist-preset py-2 rounded-xl bg-white/90 dark:bg-slate-800 text-xs font-extrabold active:scale-95 transition">3 часа</button>
+                <button data-preset="12h" class="hist-preset py-2 rounded-xl bg-blue-600 text-white text-xs font-extrabold active:scale-95 transition">Смена 12ч</button>
+                <button data-preset="today" class="hist-preset py-2 rounded-xl bg-white/90 dark:bg-slate-800 text-xs font-extrabold active:scale-95 transition">Сегодня</button>
+                <button data-preset="yesterday" class="hist-preset py-2 rounded-xl bg-white/90 dark:bg-slate-800 text-xs font-extrabold active:scale-95 transition">Вчера</button>
+            </div>
+
+            <div class="space-y-2.5 mb-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">От (дата и время)</label>
+                    <input id="histFrom" type="datetime-local" class="w-full px-3.5 py-2.5 rounded-2xl bg-white/90 dark:bg-slate-800 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">До (дата и время)</label>
+                    <input id="histTo" type="datetime-local" class="w-full px-3.5 py-2.5 rounded-2xl bg-white/90 dark:bg-slate-800 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+            </div>
+
+            <button id="btnBuildTrack" class="w-full py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm shadow-lg active:scale-[0.99] transition">
+                Показать маршрут
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== ШТОРКА 3: ИНФОРМАЦИЯ И ДАТЧИКИ ==================== -->
+    <div id="infoSensorsModal" class="modal-backdrop hidden fixed inset-0 z-[620] bg-slate-950/60 backdrop-blur-sm flex items-end justify-center pt-10 px-2 pb-2">
+        <div class="swipe-sheet w-full max-w-md max-h-full lg-glass rounded-[28px] flex flex-col overflow-hidden animate-slide-up">
+            <div class="p-4 pb-3 border-b border-slate-300/60 dark:border-slate-800 shrink-0">
+                <div class="swipe-handle w-11 h-1.5 rounded-full bg-slate-400/70 mx-auto mb-3 cursor-grab"></div>
+                <div class="flex items-center justify-between gap-2">
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-2">
+                            <span id="infoEmoji" class="text-xl">🚛</span>
+                            <h3 id="infoTitle" class="text-base font-black truncate">Белаз</h3>
+                        </div>
+                        <p id="infoSub" class="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate mt-0.5">ID · На связи</p>
+                    </div>
+                    <button id="btnInfoClose" class="w-9 h-9 rounded-full bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center shrink-0 active:scale-90 transition">✕</button>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-4 space-y-4">
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="rounded-2xl p-3 bg-amber-500/15 border border-amber-500/25 text-center">
+                        <div class="text-lg">⛽</div>
+                        <div class="text-[9.5px] font-extrabold uppercase text-amber-700 dark:text-amber-400 mt-0.5">Топливо</div>
+                        <div id="infoFuel" class="text-sm font-black mt-0.5">—</div>
+                    </div>
+                    <div class="rounded-2xl p-3 bg-indigo-500/15 border border-indigo-500/25 text-center">
+                        <div class="text-lg">⚖️</div>
+                        <div class="text-[9.5px] font-extrabold uppercase text-indigo-700 dark:text-indigo-400 mt-0.5">Вес</div>
+                        <div id="infoWeight" class="text-sm font-black mt-0.5">0 т</div>
+                        <div id="infoDynWeight" class="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">дин. 0</div>
+                    </div>
+                    <div class="rounded-2xl p-3 bg-emerald-500/15 border border-emerald-500/25 text-center">
+                        <div class="text-lg">⚡</div>
+                        <div class="text-[9.5px] font-extrabold uppercase text-emerald-700 dark:text-emerald-400 mt-0.5">Скорость</div>
+                        <div id="infoSpeed" class="text-sm font-black mt-0.5">0 км/ч</div>
+                    </div>
+                </div>
+
+                <div class="lg-card rounded-3xl p-4">
+                    <h4 class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mb-3">Основные данные</h4>
+                    <div id="infoMainFields" class="divide-y divide-slate-200/70 dark:divide-slate-800 text-xs"></div>
+                </div>
+
+                <div class="lg-card rounded-3xl p-4">
+                    <h4 id="infoSensorsHeader" class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mb-3">Датчики (0)</h4>
+                    <div id="infoSensorsFields" class="divide-y divide-slate-200/70 dark:divide-slate-800 text-xs"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== ШТОРКА 4: ФИЛЬТР ТИПОВ ТЕХНИКИ (6 КАТЕГОРИЙ) ==================== -->
+    <div id="mapFilterModal" class="modal-backdrop hidden fixed inset-0 z-[625] bg-slate-950/60 backdrop-blur-sm flex items-end justify-center p-2">
+        <div class="swipe-sheet w-full max-w-md lg-glass rounded-[28px] p-4 animate-slide-up">
+            <div class="swipe-handle w-11 h-1.5 rounded-full bg-slate-400/70 mx-auto mb-3 cursor-grab"></div>
+            <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-300/60 dark:border-slate-700">
+                <div>
+                    <h3 class="text-base font-extrabold">Фильтр техники на карте</h3>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">Синхронно фильтрует карту, зоны и список</p>
+                </div>
+                <button id="btnMapFilterClose" class="w-9 h-9 rounded-full bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center active:scale-90 transition">✕</button>
+            </div>
+            <div id="mapFilterList" class="space-y-2 mb-3"></div>
+            <div class="grid grid-cols-2 gap-2">
+                <button id="btnFilterSelectAll" class="py-2.5 rounded-2xl bg-blue-600 text-white text-xs font-extrabold active:scale-95 transition">Выбрать все</button>
+                <button id="btnFilterResetOnlyBelaz" class="py-2.5 rounded-2xl bg-white/90 dark:bg-slate-800 text-xs font-extrabold active:scale-95 transition">Только БелАЗ + Экс.</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== ШТОРКА 5: СВОДКА ПАРКА И ОЧЕРЕДЕЙ ==================== -->
+    <div id="fleetSummaryModal" class="modal-backdrop hidden fixed inset-0 z-[630] bg-slate-950/60 backdrop-blur-sm flex items-end justify-center pt-12 px-2 pb-2">
+        <div class="swipe-sheet w-full max-w-md max-h-full lg-glass rounded-[28px] flex flex-col overflow-hidden animate-slide-up">
+            <div class="p-4 pb-3 border-b border-slate-300/60 dark:border-slate-800 shrink-0">
+                <div class="swipe-handle w-11 h-1.5 rounded-full bg-slate-400/70 mx-auto mb-3 cursor-grab"></div>
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-base font-extrabold">Сводка парка и очереди</h3>
+                        <p id="summarySubtitle" class="text-xs text-slate-500 dark:text-slate-400 font-medium">Всего: 0 ед.</p>
+                    </div>
+                    <button id="btnSummaryClose" class="w-9 h-9 rounded-full bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center active:scale-90 transition">✕</button>
+                </div>
+            </div>
+            <div class="flex-1 overflow-y-auto p-4 space-y-4">
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="rounded-2xl p-3 bg-emerald-500/15 border border-emerald-500/25 text-center">
+                        <div class="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-400">В движении</div>
+                        <div id="sumMoving" class="text-lg font-black text-emerald-700 dark:text-emerald-300">0</div>
+                    </div>
+                    <div class="rounded-2xl p-3 bg-amber-500/15 border border-amber-500/25 text-center">
+                        <div class="text-[10px] font-bold uppercase text-amber-700 dark:text-amber-400">Стоянка</div>
+                        <div id="sumStopped" class="text-lg font-black text-amber-700 dark:text-amber-300">0</div>
+                    </div>
+                    <div class="rounded-2xl p-3 bg-rose-500/15 border border-rose-500/25 text-center">
+                        <div class="text-[10px] font-bold uppercase text-rose-700 dark:text-rose-400">Нет связи</div>
+                        <div id="sumOffline" class="text-lg font-black text-rose-700 dark:text-rose-300">0</div>
+                    </div>
+                </div>
+                <div>
+                    <h4 class="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Очереди у экскаваторов, АТЗ и зон</h4>
+                    <div id="summaryQueuesList" class="space-y-1.5"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== ШТОРКА 6: ТЕХНИКА ВНУТРИ ЗОНЫ (С ОЖИДАНИЕМ И РЕДАКТИРОВАНИЕМ) ==================== -->
+    <div id="zoneInfoModal" class="modal-backdrop hidden fixed inset-0 z-[635] bg-slate-950/60 backdrop-blur-sm flex items-end justify-center pt-14 px-2 pb-2">
+        <div class="swipe-sheet w-full max-w-md max-h-full lg-glass rounded-[28px] flex flex-col overflow-hidden animate-slide-up">
+            <div class="p-4 pb-3 border-b border-slate-300/60 dark:border-slate-800 shrink-0">
+                <div class="swipe-handle w-11 h-1.5 rounded-full bg-slate-400/70 mx-auto mb-3 cursor-grab"></div>
+                <div class="flex items-center justify-between gap-2">
+                    <div class="min-w-0">
+                        <h3 id="zoneInfoTitle" class="text-base font-extrabold truncate">Зона</h3>
+                        <p id="zoneInfoSub" class="text-xs text-slate-500 dark:text-slate-400 font-medium">Техники внутри: 0</p>
+                    </div>
+                    <button id="btnZoneInfoClose" class="w-9 h-9 rounded-full bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center shrink-0 active:scale-90 transition">✕</button>
+                </div>
+
+                <!-- 3 карточки статистики очереди -->
+                <div class="grid grid-cols-3 gap-2 mt-3 text-center">
+                    <div class="rounded-2xl py-2 bg-white/75 dark:bg-slate-800/75">
+                        <div class="text-[9.5px] font-bold uppercase text-slate-400">В зоне</div>
+                        <div id="zStatCount" class="text-sm font-black">0 шт.</div>
+                    </div>
+                    <div class="rounded-2xl py-2 bg-blue-500/15">
+                        <div class="text-[9.5px] font-bold uppercase text-blue-600 dark:text-blue-400">Среднее</div>
+                        <div id="zStatAvg" class="text-sm font-black text-blue-700 dark:text-blue-300">0 с</div>
+                    </div>
+                    <div class="rounded-2xl py-2 bg-orange-500/15">
+                        <div class="text-[9.5px] font-bold uppercase text-orange-600 dark:text-orange-400">Макс.</div>
+                        <div id="zStatMax" class="text-sm font-black text-orange-700 dark:text-orange-300">0 с</div>
+                    </div>
+                </div>
+
+                <div id="zoneInfoEditActions" class="hidden mt-3 flex items-center gap-2">
+                    <input id="zoneRenameInput" type="text" class="flex-1 px-3 py-1.5 rounded-xl bg-white/90 dark:bg-slate-800 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500" />
+                    <button id="btnZoneRenameSave" class="px-3 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-bold active:scale-95 transition">Сохранить</button>
+                    <button id="btnZoneDelete" class="px-3 py-1.5 rounded-xl bg-rose-600 text-white text-xs font-bold active:scale-95 transition">Удалить</button>
+                </div>
+            </div>
+            <div id="zoneInfoList" class="flex-1 overflow-y-auto p-4 space-y-1.5"></div>
+        </div>
+    </div>
+
+    <!-- ==================== TOAST-УВЕДОМЛЕНИЕ ==================== -->
+    <div id="toastBox" class="hidden fixed top-16 left-1/2 -translate-x-1/2 z-[999] bg-slate-900/92 dark:bg-white/95 text-white dark:text-slate-900 px-4 py-2.5 rounded-full text-xs font-extrabold shadow-xl max-w-[90vw] text-center transition-all"></div>
+
+    <script>
+    'use strict';
+
+    // ==================== 1. КОНФИГУРАЦИЯ И ВШИТЫЕ ДАННЫЕ ====================
+    const STORAGE_KEY = 'kruz_sputnik_v17_cfg';
+    const DEFAULT_CFG = {
+        server: 'https://webask.ugmk.com/ASK-BUR/NavisolServiceMobile.asmx',
+        login: 'kru-test',
+        password: 'Jndf;yst29',
+        autoRefresh: true,
+        refreshInterval: 3,
+        selInterval: 1,
+        smooth: true,
+        predictMotion: true,
+        fps: 60,
+        followSelected: true,
+        showLabels: true,
+        showOffline: true,
+        showGeoZones: false,
+        showExcZones: true,
+        zoneRadius: 60,
+        darkTheme: false,
+        autoLogin: true,
+        demoMode: false,
+        satellite: false,
+        uiScale: 1,
+        favorites: ['Белаз 279', 'Экс. WK-35 №98', 'Белаз 292'],
+        mapTypeFilter: {
+            belaz: true,
+            excavator: true,
+            bulldozer: true,
+            grader: true,
+            fuel: true,
+            other: true
+        },
+        customZones: [
+            {
+                id: 'cz_sogorlyk',
+                name: 'Отвал согорлык',
+                type: 'polygon',
+                color: '#9333EA',
+                coords: [
+                    [54.2498, 86.1502],
+                    [54.2478, 86.1558],
+                    [54.2442, 86.1530],
+                    [54.2465, 86.1475]
+                ]
+            },
+            {
+                id: 'cz_peresmenok',
+                name: 'Пересменок 149',
+                type: 'polygon',
+                color: '#0891B2',
+                coords: [
+                    [54.2545, 86.1565],
+                    [54.2545, 86.1610],
+                    [54.2515, 86.1610],
+                    [54.2515, 86.1565]
+                ]
+            }
+        ]
+    };
+
+    function loadConfig() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) return structuredClone(DEFAULT_CFG);
+            const parsed = JSON.parse(raw);
+            return {
+                ...structuredClone(DEFAULT_CFG),
+                ...parsed,
+                mapTypeFilter: { ...DEFAULT_CFG.mapTypeFilter, ...(parsed.mapTypeFilter || {}) }
+            };
+        } catch (e) {
+            return structuredClone(DEFAULT_CFG);
+        }
+    }
+
+    function saveConfig() {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state.cfg));
+            if (window.AndroidBridge && typeof window.AndroidBridge.savePrefs === 'function') {
+                window.AndroidBridge.savePrefs(JSON.stringify(state.cfg));
+            }
+        } catch (e) {}
+    }
+
+    // ==================== 2. ГЛОБАЛЬНОЕ СОСТОЯНИЕ ====================
+    const state = {
+        cfg: loadConfig(),
+        activeTab: 'map',
+        objects: new Map(),       // id -> объект техники
+        animPos: new Map(),       // id -> { lat, lon, course, lastUpdateMs } для плавности 60 FPS
+        markers: new Map(),       // id -> L.Marker
+        canvasDots: new Map(),    // id -> L.CircleMarker (zoom < 12)
+        zoneCircles: new Map(),   // id -> L.Circle
+        geoPolygons: [],          // Серверные геозоны
+        customZoneLayers: [],     // Пользовательские зоны
+        zonePresence: new Map(),  // zoneKey -> Map(objId -> entryMs)
+        selectedId: null,
+        activePopup: null,
+        followPausedUntil: 0,
+        trackLayers: [],
+        trackStopMarkers: [],
+        trackPlayMarker: null,
+        trackPoints: [],
+        trackIdx: 0,
+        trackTimer: null,
+        trackSpeedMult: 1,
+        trackFollow: true,
+        drawingZone: false,
+        zoneDrawType: 'circle',
+        zoneDrawColor: '#9333EA',
+        zoneDrawRadius: 120,
+        zoneCircleCenter: null,
+        drawPoints: [],
+        drawPreviewLayer: null,
+        activeEditZoneId: null,
+        userMarker: null,
+        userLatLng: null,
+        refreshTimer: null,
+        selRefreshTimer: null,
+        isFetching: false,
+        failCount: 0,
+        connFilter: 'all',
+        actFilter: 'all',
+        typeFilter: 'all',
+        objListLimit: 120,
+        logs: [],
+        perf: { netMs: 0, parseMs: 0, kb: 0, fps: 60 },
+        lastFrameTime: performance.now(),
+        fpsFrames: 0,
+        fpsLastCheck: performance.now()
+    };
+
+    // ==================== 3. 3D-СТИЛИЗОВАННЫЕ ИКОНКИ ТЕХНИКИ ====================
+    const VEHICLE_EMOJI = {
+        belaz: '🚛',
+        excavator: '⛏️',
+        bulldozer: '🚜',
+        grader: '🚧',
+        fuel: '⛽',
+        other: '🚗'
+    };
+
+    const CATEGORY_META = [
+        { key: 'belaz', label: 'БелАЗ (самосвалы)', emoji: '🚛' },
+        { key: 'excavator', label: 'Экскаваторы', emoji: '⛏️' },
+        { key: 'bulldozer', label: 'Бульдозеры', emoji: '🚜' },
+        { key: 'grader', label: 'Грейдеры', emoji: '🚧' },
+        { key: 'fuel', label: 'Заправки (АТЗ/АЗС)', emoji: '⛽' },
+        { key: 'other', label: 'Прочая техника', emoji: '🚗' }
+    ];
+
+    const VEHICLE_SVG = {
+        // БелАЗ порожний
+        belaz_empty: `<svg viewBox="0 0 48 48" class="w-10 h-10">
+            <rect x="6" y="13" width="24" height="17" rx="3" fill="#F59E0B" stroke="#78350F" stroke-width="2"/>
+            <path d="M9 16 L27 16 L24 27 L11 27 Z" fill="#D97706"/>
+            <rect x="30" y="17" width="12" height="14" rx="2.5" fill="#FBBF24" stroke="#78350F" stroke-width="2"/>
+            <rect x="33" y="19" width="7" height="5" rx="1" fill="#0F172A"/>
+            <circle cx="14" cy="34" r="6" fill="#1E293B" stroke="#0F172A" stroke-width="2"/>
+            <circle cx="14" cy="34" r="2.2" fill="#F59E0B"/>
+            <circle cx="35" cy="34" r="6" fill="#1E293B" stroke="#0F172A" stroke-width="2"/>
+            <circle cx="35" cy="34" r="2.2" fill="#F59E0B"/>
+        </svg>`,
+        // БелАЗ гружёный (с углём/породой в кузове, включается при весе >= 45 т)
+        belaz_loaded: `<svg viewBox="0 0 48 48" class="w-10 h-10">
+            <path d="M8 14 Q14 4 20 8 Q26 5 29 14 Z" fill="#334155" stroke="#0F172A" stroke-width="1.6"/>
+            <path d="M12 12 L18 8 L24 12 Z" fill="#475569"/>
+            <rect x="6" y="13" width="24" height="17" rx="3" fill="#F59E0B" stroke="#78350F" stroke-width="2"/>
+            <rect x="30" y="17" width="12" height="14" rx="2.5" fill="#FBBF24" stroke="#78350F" stroke-width="2"/>
+            <rect x="33" y="19" width="7" height="5" rx="1" fill="#0F172A"/>
+            <circle cx="14" cy="34" r="6" fill="#1E293B" stroke="#0F172A" stroke-width="2"/>
+            <circle cx="14" cy="34" r="2.2" fill="#22C55E"/>
+            <circle cx="35" cy="34" r="6" fill="#1E293B" stroke="#0F172A" stroke-width="2"/>
+            <circle cx="35" cy="34" r="2.2" fill="#22C55E"/>
+        </svg>`,
+        excavator: `<svg viewBox="0 0 48 48" class="w-10 h-10">
+            <rect x="8" y="32" width="26" height="8" rx="4" fill="#1E293B" stroke="#0F172A" stroke-width="2"/>
+            <rect x="11" y="18" width="19" height="14" rx="2.5" fill="#EA580C" stroke="#7C2D12" stroke-width="2"/>
+            <rect x="21" y="20" width="7" height="6" rx="1" fill="#E0F2FE"/>
+            <path d="M28 21 L39 10 L44 20 L38 25" fill="none" stroke="#F97316" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M36 24 L43 24 L40 31 Z" fill="#334155" stroke="#0F172A" stroke-width="1.5"/>
+        </svg>`,
+        bulldozer: `<svg viewBox="0 0 48 48" class="w-10 h-10">
+            <rect x="8" y="30" width="26" height="9" rx="4.5" fill="#1E293B" stroke="#0F172A" stroke-width="2"/>
+            <rect x="12" y="18" width="19" height="12" rx="2" fill="#EAB308" stroke="#713F12" stroke-width="2"/>
+            <rect x="15" y="11" width="10" height="8" rx="1.5" fill="#FDE047" stroke="#713F12" stroke-width="1.8"/>
+            <path d="M36 22 C41 22 42 36 37 38 L33 38 L33 26 Z" fill="#CA8A04" stroke="#713F12" stroke-width="2"/>
+        </svg>`,
+        grader: `<svg viewBox="0 0 48 48" class="w-10 h-10">
+            <rect x="7" y="22" width="33" height="6" rx="2" fill="#FACC15" stroke="#713F12" stroke-width="1.8"/>
+            <rect x="10" y="13" width="10" height="10" rx="2" fill="#FEF08A" stroke="#713F12" stroke-width="1.8"/>
+            <rect x="21" y="29" width="9" height="5" rx="1" fill="#475569" stroke="#0F172A" stroke-width="1.5"/>
+            <circle cx="11" cy="34" r="4.5" fill="#1E293B"/>
+            <circle cx="19" cy="34" r="4.5" fill="#1E293B"/>
+            <circle cx="38" cy="34" r="4.5" fill="#1E293B"/>
+        </svg>`,
+        fuel: `<svg viewBox="0 0 48 48" class="w-10 h-10">
+            <rect x="6" y="14" width="24" height="16" rx="7" fill="#0EA5E9" stroke="#0369A1" stroke-width="2"/>
+            <path d="M18 17 C18 17 14 22 14 24.5 A4 4 0 0 0 22 24.5 C22 22 18 17 18 17 Z" fill="#E0F2FE"/>
+            <rect x="30" y="18" width="11" height="12" rx="2.5" fill="#38BDF8" stroke="#0369A1" stroke-width="2"/>
+            <circle cx="14" cy="34" r="5" fill="#1E293B"/>
+            <circle cx="35" cy="34" r="5" fill="#1E293B"/>
+        </svg>`,
+        other: `<svg viewBox="0 0 48 48" class="w-9 h-9">
+            <rect x="9" y="18" width="30" height="14" rx="5" fill="#3B82F6" stroke="#1E3A8A" stroke-width="2"/>
+            <rect x="15" y="13" width="18" height="8" rx="3" fill="#93C5FD" stroke="#1E3A8A" stroke-width="1.8"/>
+            <circle cx="15" cy="34" r="4.5" fill="#1E293B"/>
+            <circle cx="33" cy="34" r="4.5" fill="#1E293B"/>
+        </svg>`
+    };
+
+    function detectVehicleType(name) {
+        const s = String(name || '').toLowerCase();
+        if (s.includes('белаз') || s.includes('belaz') || s.includes('самосвал') || s.includes('скания') || s.includes('man ')) return 'belaz';
+        if (s.includes('экс') || s.includes('wk-') || s.includes('экг') || s.includes('hyundai') || s.includes('pc-') || s.includes('l-9250') || s.includes('hitachi')) return 'excavator';
+        if (s.includes('бул') || s.includes('cat-d') || s.includes('т-170') || s.includes('d10') || s.includes('d9') || s.includes('к-703')) return 'bulldozer';
+        if (s.includes('грейд') || s.includes('grader') || s.includes('дз-') || s.includes('16m') || s.includes('24m')) return 'grader';
+        if (s.includes('атз') || s.includes('азс') || s.includes('топлив') || s.includes('заправ')) return 'fuel';
+        return 'other';
+    }
+
+    function getVehicleSvgKey(obj) {
+        if (obj.type === 'belaz') {
+            return (Number(obj.weight) >= 45) ? 'belaz_loaded' : 'belaz_empty';
+        }
+        return VEHICLE_SVG[obj.type] ? obj.type : 'other';
+    }
+
+    // ==================== 4. УТИЛИТЫ, СМЕНЫ, МАТЕМАТИКА ====================
+    function showToast(msg) {
+        const el = document.getElementById('toastBox');
+        if (!el) return;
+        el.textContent = msg;
+        el.classList.remove('hidden');
+        clearTimeout(el._t);
+        el._t = setTimeout(() => el.classList.add('hidden'), 2800);
+    }
+
+    function logMsg(msg) {
+        const t = new Date().toTimeString().slice(0, 8);
+        state.logs.push(`[${t}] ${msg}`);
+        if (state.logs.length > 80) state.logs.shift();
+        const box = document.getElementById('connectionLog');
+        if (box) {
+            box.textContent = state.logs.join('\n');
+            box.scrollTop = box.scrollHeight;
+        }
+    }
+
+    function copyTextToClipboard(text) {
+        if (window.AndroidBridge && typeof window.AndroidBridge.copy === 'function') {
+            window.AndroidBridge.copy(text);
+            showToast('Скопировано');
+            return;
+        }
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try {
+            document.execCommand('copy');
+            showToast('Скопировано в буфер обмена');
+        } catch (e) {
+            showToast('Не удалось скопировать');
+        }
+        document.body.removeChild(ta);
+    }
+
+    function distMeters(lat1, lon1, lat2, lon2) {
+        const dLat = (lat2 - lat1) * 111320;
+        const dLon = (lon2 - lon1) * 111320 * Math.cos(lat1 * Math.PI / 180);
+        return Math.sqrt(dLat * dLat + dLon * dLon);
+    }
+
+    function calcBearing(lat1, lon1, lat2, lon2) {
+        const toRad = d => d * Math.PI / 180;
+        const y = Math.sin(toRad(lon2 - lon1)) * Math.cos(toRad(lat2));
+        const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+                  Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lon2 - lon1));
+        return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
+
+    function unwrapAngle(prevDeg, targetDeg) {
+        let diff = ((targetDeg - prevDeg + 540) % 360) - 180;
+        return prevDeg + diff;
+    }
+
+    function formatDistShort(m) {
+        return m < 1000 ? `${Math.round(m)} м` : `${(m / 1000).toFixed(1)} км`;
+    }
+
+    function formatDurationSec(sec) {
+        const s = Math.max(0, Math.round(sec));
+        if (s < 60) return `${s} с`;
+        const m = Math.floor(s / 60);
+        const rem = s % 60;
+        if (m < 60) return `${m}м ${rem}с`;
+        const h = Math.floor(m / 60);
+        return `${h}ч ${m % 60}м`;
+    }
+
+    function getCurrentShiftInfo() {
+        const now = new Date();
+        const mins = now.getHours() * 60 + now.getMinutes();
+        const isShift1 = mins >= 450 && mins < 1170; // 07:30 – 19:30
+        return { number: isShift1 ? 1 : 2, label: isShift1 ? '№1' : '№2' };
+    }
+
+    function pointInPolygon(lat, lon, poly) {
+        let inside = false;
+        for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+            const xi = poly[i][0], yi = poly[i][1];
+            const xj = poly[j][0], yj = poly[j][1];
+            const intersect = ((yi > lon) !== (yj > lon)) &&
+                (lat < (xj - xi) * (lon - yi) / ((yj - yi) || 1e-12) + xi);
+            if (intersect) inside = !inside;
+        }
+        return inside;
+    }
+
+    function isPointInCustomZone(lat, lon, z) {
+        if (z.type === 'circle' && z.lat != null && z.lng != null) {
+            return distMeters(lat, lon, z.lat, z.lng) <= (z.radius || 100);
+        }
+        const pts = z.coords || z.points || [];
+        return pts.length >= 3 && pointInPolygon(lat, lon, pts);
+    }
+
+    function getObjectCustomZone(obj) {
+        const zones = state.cfg.customZones || [];
+        for (let i = 0; i < zones.length; i++) {
+            if (isPointInCustomZone(obj.lat, obj.lon, zones[i])) return zones[i];
+        }
+        return null;
+    }
+
+    function getObjectZoneName(obj) {
+        const z = getObjectCustomZone(obj);
+        return z ? z.name : 'Вне геозон';
+    }
+
+    // ==================== 5. SOAP 1.1 КЛИЕНТ + НАТИВНЫЙ МОСТ ====================
+    function escapeXml(str) {
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    async function callSoap(methodName, paramsObj) {
+        const ns = 'http://navisol.ru/webservices/';
+        const innerXml = Object.entries(paramsObj)
+            .map(([k, v]) => `<${k}>${escapeXml(v)}</${k}>`)
+            .join('');
+
+        const envelope = `<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <${methodName} xmlns="${ns}">${innerXml}</${methodName}>
+  </soap:Body>
+</soap:Envelope>`;
+
+        const soapAction = `"${ns}${methodName}"`;
+        const t0 = performance.now();
+
+        if (window.AndroidBridge && typeof window.AndroidBridge.soapRequest === 'function') {
+            const text = await window.AndroidBridge.soapRequest(state.cfg.server, soapAction, envelope);
+            state.perf.netMs = Math.round(performance.now() - t0);
+            state.perf.kb = Math.round((text || '').length / 1024);
+            return text;
+        }
+
+        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorHttp) {
+            const res = await window.Capacitor.Plugins.CapacitorHttp.post({
+                url: state.cfg.server,
+                headers: { 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': soapAction },
+                data: envelope
+            });
+            const text = typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
+            state.perf.netMs = Math.round(performance.now() - t0);
+            state.perf.kb = Math.round(text.length / 1024);
+            return text;
+        }
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 9000);
+        try {
+            const resp = await fetch(state.cfg.server, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': soapAction },
+                body: envelope,
+                signal: controller.signal
+            });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const text = await resp.text();
+            state.perf.netMs = Math.round(performance.now() - t0);
+            state.perf.kb = Math.round(text.length / 1024);
+            return text;
+        } finally {
+            clearTimeout(timeoutId);
+        }
+    }
+
+    function parseWeightNumber(raw) {
+        if (raw == null || raw === '' || raw === '—') return 0;
+        const n = parseFloat(String(raw).replace(',', '.'));
+        if (!Number.isFinite(n)) return 0;
+        // Автоперевод из кг в тонны
+        return n > 500 ? Math.round(n / 1000) : Math.round(n);
+    }
+
+    function parseObjectsXml(xmlText) {
+        const t0 = performance.now();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(xmlText, 'text/xml');
+        const list = [];
+        const nodes = doc.getElementsByTagName('*');
+
+        for (let i = 0; i < nodes.length; i++) {
+            const node = nodes[i];
+            const getVal = (names) => {
+                for (const n of names) {
+                    const attr = node.getAttribute(n) || node.getAttribute(n.toLowerCase()) || node.getAttribute(n.toUpperCase());
+                    if (attr !== null) return attr;
+                    for (let c = 0; c < node.children.length; c++) {
+                        if (node.children[c].localName.toLowerCase() === n.toLowerCase()) {
+                            return node.children[c].textContent;
+                        }
+                    }
+                }
+                return null;
+            };
+
+            const latRaw = getVal(['lat', 'latitude', 'y']);
+            const lonRaw = getVal(['lon', 'lng', 'longitude', 'x']);
+            if (latRaw === null || lonRaw === null) continue;
+
+            const lat = parseFloat(String(latRaw).replace(',', '.'));
+            const lon = parseFloat(String(lonRaw).replace(',', '.'));
+            if (!Number.isFinite(lat) || !Number.isFinite(lon) || (lat === 0 && lon === 0)) continue;
+
+            const id = String(getVal(['id', 'objid', 'objectid', 'guid']) || `obj_${i}`);
+            const name = getVal(['name', 'objname', 'title', 'gosnomer']) || `Объект ${id}`;
+            const speed = Math.round(parseFloat(String(getVal(['speed', 'spd', 'v']) || '0').replace(',', '.')) || 0);
+            let course = parseFloat(String(getVal(['course', 'azimut', 'dir', 'heading']) || '0').replace(',', '.')) || 0;
+
+            const prevObj = state.objects.get(id);
+            if (course === 0 && prevObj && distMeters(prevObj.lat, prevObj.lon, lat, lon) > 3) {
+                course = calcBearing(prevObj.lat, prevObj.lon, lat, lon);
+            }
+
+            const dt = getVal(['dt', 'time', 'lastdt', 'date', 'gpsdt']) || new Date().toTimeString().slice(0, 8);
+            const fuel = getVal(['fuel', 'fls', 'fuellevel']) || '—';
+            const weight = parseWeightNumber(getVal(['weight', 'ves', 'load']));
+            const dynWeight = parseWeightNumber(getVal(['dynweight', 'dynamicweight', 'vesdyn']));
+            const trips = getVal(['trips', 'reis', 'reisy']) || (prevObj ? prevObj.trips : '0');
+            const address = getVal(['address', 'addr', 'location']) || 'Салаирский кряж, Беловский МО, Кемеровская обл.';
+            const onlineRaw = getVal(['online', 'active', 'isactive', 'connect']);
+            const online = onlineRaw !== null ? (onlineRaw === 'true' || onlineRaw === '1') : true;
+            const ignRaw = getVal(['ignition', 'engine', 'ign', 'dvs']);
+            const voltRaw = parseFloat(String(getVal(['voltage', 'power', 'pwr', 'vbat']) || '24').replace(',', '.'));
+            const massOff = !online || (Number.isFinite(voltRaw) && voltRaw <= 10);
+            const engineOff = massOff || (ignRaw !== null && (ignRaw === '0' || ignRaw === 'false'));
+
+            // Живой пробег за смену (фильтр шума < 3 м и телепортов > 2000 м)
+            let liveDistKm = prevObj ? prevObj.mileageNum : (parseFloat(getVal(['mileage', 'probeg', 'dist']) || '0') || 0);
+            if (prevObj) {
+                const dm = distMeters(prevObj.lat, prevObj.lon, lat, lon);
+                if (dm >= 3 && dm <= 2000) liveDistKm += dm / 1000;
+            }
+
+            // Трекинг времени остановки
+            let stoppedSinceMs = prevObj ? prevObj.stoppedSinceMs : (speed === 0 ? Date.now() - 420000 : null);
+            if (speed > 2) stoppedSinceMs = null;
+            else if (!stoppedSinceMs) stoppedSinceMs = Date.now();
+
+            list.push({
+                id,
+                name: String(name).trim(),
+                type: detectVehicleType(name),
+                lat, lon, speed, course,
+                time: String(dt).slice(-8),
+                fuel: fuel !== '—' && !Number.isNaN(parseFloat(fuel)) ? parseFloat(fuel).toFixed(2) : '—',
+                weight,
+                dynWeight,
+                trips: String(trips),
+                mileageNum: liveDistKm,
+                mileage: liveDistKm.toFixed(1),
+                address: String(address),
+                online,
+                engineOff,
+                massOff,
+                stoppedSinceMs,
+                updatedAtMs: performance.now()
+            });
+        }
+        state.perf.parseMs = Math.round(performance.now() - t0);
+        return list;
+    }
+
+    // ==================== 6. РЕАЛИСТИЧНАЯ ДЕМО-СИМУЛЯЦИЯ КАРЬЕРА (623 ЕД.) ====================
+    function initDemoFleet() {
+        if (state.objects.size > 0) return;
+        const baseLat = 54.248687;
+        const baseLon = 86.153297;
+
+        const keyUnits = [
+            { id: '27f66d38-a455-448f-bc2a-99c57085aa97', name: 'Белаз 2003', lat: 54.249292, lon: 86.153760, speed: 24, fuel: 2191.40, weight: 132, trips: 7, mileage: 71.3 },
+            { id: 'belaz_279', name: 'Белаз 279', lat: 54.2528, lon: 86.1512, speed: 17, fuel: 770.54, weight: 2, trips: 4, mileage: 28.4 },
+            { id: 'exc_wk35', name: 'Экс. WK-35 №98', lat: 54.2504, lon: 86.1515, speed: 0, fuel: 1420.00, weight: 0, trips: 0, mileage: 0.4 },
+            { id: 'belaz_293', name: 'Белаз 293', lat: 54.25055, lon: 86.15175, speed: 0, fuel: 910.20, weight: 88, trips: 5, mileage: 36.2 },
+            { id: 'belaz_292', name: 'Белаз 292', lat: 54.2562, lon: 86.1578, speed: 0, fuel: 1120.40, weight: 0, trips: 6, mileage: 41.2 },
+            { id: 'atz_856', name: 'АТЗ КАМАЗ 856', lat: 54.25635, lon: 86.15805, speed: 0, fuel: 4850.00, weight: 0, trips: 0, mileage: 12.1 },
+            { id: 'belaz_280', name: 'Белаз 280', lat: 54.2472, lon: 86.1545, speed: 18, fuel: 980.10, weight: 128, trips: 5, mileage: 32.8 },
+            { id: 'belaz_1945', name: 'Белаз 1945', lat: 54.2539, lon: 86.1495, speed: 30, fuel: 1340.50, weight: 0, trips: 8, mileage: 64.0 },
+            { id: 'bul_cat12', name: 'Бул. CAT-D10T2 №12', lat: 54.2503, lon: 86.1526, speed: 4, fuel: 520.00, weight: 0, trips: 0, mileage: 9.4 },
+            { id: 'grd_16m', name: 'Грейдер CAT 16M №4', lat: 54.2518, lon: 86.1562, speed: 14, fuel: 390.00, weight: 0, trips: 0, mileage: 22.7 },
+            { id: 'belaz_dead', name: 'Белаз 5066', lat: 54.2464, lon: 86.1501, speed: 0, fuel: 412.00, weight: 0, trips: 2, mileage: 14.5, engineOff: true, massOff: true }
+        ];
+
+        keyUnits.forEach((u, idx) => {
+            state.objects.set(u.id, {
+                id: u.id,
+                name: u.name,
+                type: detectVehicleType(u.name),
+                lat: u.lat,
+                lon: u.lon,
+                speed: u.speed,
+                course: 24 + idx * 33,
+                time: new Date().toTimeString().slice(0, 8),
+                fuel: u.fuel.toFixed(2),
+                weight: u.weight,
+                dynWeight: u.weight > 0 ? Math.max(0, u.weight - 3) : 0,
+                trips: String(u.trips),
+                mileageNum: u.mileage,
+                mileage: u.mileage.toFixed(1),
+                address: 'region Салаирский кряж, Беловский муниципальный округ, Кемеровская область',
+                online: !u.massOff,
+                engineOff: Boolean(u.engineOff),
+                massOff: Boolean(u.massOff),
+                stoppedSinceMs: u.speed === 0 ? Date.now() - (idx + 2) * 310000 : null,
+                updatedAtMs: performance.now()
+            });
+        });
+
+        for (let i = keyUnits.length; i < 623; i++) {
+            const r = Math.random();
+            let name;
+            if (r < 0.58) name = `Белаз ${1000 + i}`;
+            else if (r < 0.74) name = `Экс. ЭКГ-${5 + (i % 15)} №${i % 99}`;
+            else if (r < 0.84) name = `Бул. CAT-D${8 + (i % 3)} №${i % 50}`;
+            else if (r < 0.90) name = `Грейдер ДЗ-${98 + (i % 5)} №${i % 20}`;
+            else if (r < 0.95) name = `АТЗ-${10 + (i % 8)} №${i % 40}`;
+            else name = `УАЗ Патриот ${100 + (i % 899)}`;
+
+            const type = detectVehicleType(name);
+            const online = Math.random() > 0.08;
+            const moving = online && type !== 'excavator' && Math.random() > 0.34;
+            const massOff = !online;
+            const engineOff = massOff || (!moving && Math.random() > 0.65);
+            const id = 'demo_' + i;
+            const mil = Number((Math.random() * 75).toFixed(1));
+            const weight = type === 'belaz' ? (Math.random() > 0.45 ? Math.floor(110 + Math.random() * 45) : 0) : 0;
+
+            state.objects.set(id, {
+                id,
+                name,
+                type,
+                lat: baseLat + (Math.random() - 0.5) * 0.085,
+                lon: baseLon + (Math.random() - 0.5) * 0.135,
+                speed: moving ? Math.floor(10 + Math.random() * 32) : 0,
+                course: Math.floor(Math.random() * 360),
+                time: new Date().toTimeString().slice(0, 8),
+                fuel: (180 + Math.random() * 1900).toFixed(2),
+                weight,
+                dynWeight: weight > 0 ? weight - 2 : 0,
+                trips: type === 'belaz' ? String(Math.floor(Math.random() * 14)) : '0',
+                mileageNum: mil,
+                mileage: mil.toFixed(1),
+                address: 'region Салаирский кряж, Беловский муниципальный округ, Кемеровская область',
+                online,
+                engineOff,
+                massOff,
+                stoppedSinceMs: !moving ? Date.now() - Math.floor(Math.random() * 2400000) : null,
+                updatedAtMs: performance.now()
+            });
+        }
+    }
+
+    function stepDemoFleet(onlyId = null) {
+        const nowStr = new Date().toTimeString().slice(0, 8);
+        const nowPerf = performance.now();
+        const stepObj = (obj) => {
+            if (!obj.online || obj.engineOff) return;
+            obj.time = nowStr;
+            obj.updatedAtMs = nowPerf;
+            if (obj.speed > 0 && obj.type !== 'excavator') {
+                const rad = obj.course * Math.PI / 180;
+                const dtSec = onlyId ? state.cfg.selInterval : state.cfg.refreshInterval;
+                const distM = (obj.speed / 3.6) * dtSec;
+                const dLat = (distM * Math.cos(rad)) / 111320;
+                const dLon = (distM * Math.sin(rad)) / (111320 * Math.cos(obj.lat * Math.PI / 180));
+                obj.lat += dLat;
+                obj.lon += dLon;
+                obj.course = (obj.course + (Math.random() - 0.5) * 14 + 360) % 360;
+                obj.speed = Math.max(8, Math.min(44, Math.round(obj.speed + (Math.random() - 0.5) * 4)));
+                obj.mileageNum += distM / 1000;
+                obj.mileage = obj.mileageNum.toFixed(1);
+            }
+        };
+
+        if (onlyId && state.objects.has(onlyId)) {
+            stepObj(state.objects.get(onlyId));
+        } else {
+            state.objects.forEach(stepObj);
+        }
+    }
+
+    // ==================== 7. ТРЕКЕР ОЧЕРЕДЕЙ И ЗОН ====================
+    function updateZonePresence() {
+        const now = Date.now();
+        const allObjs = Array.from(state.objects.values()).filter(o => o.online);
+        const hubs = allObjs.filter(o => o.type === 'excavator' || o.type === 'fuel');
+        const dumps = allObjs.filter(o => o.type === 'belaz');
+
+        const activeKeys = new Set();
+
+        hubs.forEach(hub => {
+            const key = `hub_${hub.id}`;
+            activeKeys.add(key);
+            if (!state.zonePresence.has(key)) state.zonePresence.set(key, new Map());
+            const q = state.zonePresence.get(key);
+            const insideIds = new Set();
+            const rad = state.cfg.zoneRadius + 25;
+
+            dumps.forEach(d => {
+                if (distMeters(hub.lat, hub.lon, d.lat, d.lon) <= rad) {
+                    insideIds.add(d.id);
+                    if (!q.has(d.id)) q.set(d.id, now - Math.floor(Math.random() * 140000));
+                }
+            });
+            q.forEach((_, id) => { if (!insideIds.has(id)) q.delete(id); });
+        });
+
+        (state.cfg.customZones || []).forEach(cz => {
+            const key = `cz_${cz.id}`;
+            activeKeys.add(key);
+            if (!state.zonePresence.has(key)) state.zonePresence.set(key, new Map());
+            const q = state.zonePresence.get(key);
+            const insideIds = new Set();
+
+            allObjs.forEach(o => {
+                if (isPointInCustomZone(o.lat, o.lon, cz)) {
+                    insideIds.add(o.id);
+                    if (!q.has(o.id)) q.set(o.id, now - Math.floor(Math.random() * 90000));
+                }
+            });
+            q.forEach((_, id) => { if (!insideIds.has(id)) q.delete(id); });
+        });
+
+        state.zonePresence.forEach((_, k) => { if (!activeKeys.has(k)) state.zonePresence.delete(k); });
+    }
+
+    function getZoneQueueStats(zoneKey) {
+        const q = state.zonePresence.get(zoneKey);
+        if (!q || q.size === 0) return { count: 0, avgSec: 0, maxSec: 0, items: [] };
+        const now = Date.now();
+        let sum = 0, max = 0;
+        const items = [];
+        q.forEach((entryMs, objId) => {
+            const obj = state.objects.get(objId);
+            if (!obj) return;
+            const dur = Math.max(1, (now - entryMs) / 1000);
+            sum += dur;
+            if (dur > max) max = dur;
+            items.push({ obj, waitSec: dur });
+        });
+        items.sort((a, b) => b.waitSec - a.waitSec);
+        return { count: items.length, avgSec: items.length ? sum / items.length : 0, maxSec: max, items };
+    }
+
+    // ==================== 8. КАРТА LEAFLET (CANVAS 60 FPS) ====================
+    let map, osmLayer, satLayer, canvasRenderer;
+
+    function initMap() {
+        canvasRenderer = L.canvas({ padding: 0.5 });
+        map = L.map('map', {
+            center: [54.2500, 86.1535],
+            zoom: 14,
+            zoomControl: false,
+            preferCanvas: true
+        });
+
+        osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            keepBuffer: 4,
+            className: 'osm-dark-tiles'
+        });
+        satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            maxZoom: 18,
+            keepBuffer: 4
+        });
+
+        applyMapLayer();
+
+        const pauseFollow = () => {
+            if (state.cfg.followSelected && state.selectedId) {
+                state.followPausedUntil = performance.now() + 6000;
+            }
+        };
+        map.on('dragstart zoomstart', pauseFollow);
+        map.on('moveend zoomend', () => renderVisibleMarkers());
+        map.on('click', (e) => {
+            if (state.drawingZone) {
+                addZoneDrawPoint(e.latlng);
+            } else {
+                selectObject(null);
+            }
+        });
+
+        renderCustomZones();
+    }
+
+    function applyMapLayer() {
+        if (!map) return;
+        const mapEl = document.getElementById('map');
+        if (state.cfg.satellite) {
+            if (map.hasLayer(osmLayer)) map.removeLayer(osmLayer);
+            if (!map.hasLayer(satLayer)) satLayer.addTo(map);
+            document.getElementById('layerToggleText').textContent = 'Схема';
+            if (mapEl) mapEl.classList.add('sat-mode');
+        } else {
+            if (map.hasLayer(satLayer)) map.removeLayer(satLayer);
+            if (!map.hasLayer(osmLayer)) osmLayer.addTo(map);
+            document.getElementById('layerToggleText').textContent = 'Спутн.';
+            if (mapEl) mapEl.classList.remove('sat-mode');
+        }
+    }
+
+    // ==================== 9. ПОЛЬЗОВАТЕЛЬСКИЕ ЗОНЫ (КРУГ + КОНТУР) ====================
+    function renderCustomZones() {
+        state.customZoneLayers.forEach(l => map.removeLayer(l));
+        state.customZoneLayers = [];
+
+        (state.cfg.customZones || []).forEach(z => {
+            let layer = null;
+            const color = z.color || '#9333EA';
+            if (z.type === 'circle' && z.lat != null && z.lng != null) {
+                layer = L.circle([z.lat, z.lng], {
+                    radius: z.radius || 120,
+                    color, weight: 2.2, fillColor: color, fillOpacity: 0.16, renderer: canvasRenderer
+                });
+            } else {
+                const pts = z.coords || z.points || [];
+                if (pts.length < 3) return;
+                layer = L.polygon(pts, {
+                    color, weight: 2.2, fillColor: color, fillOpacity: 0.16, renderer: canvasRenderer
+                });
+            }
+            layer.bindTooltip(`📌 ${z.name}`, {
+                permanent: true, direction: 'center', className: 'zone-pin-tooltip'
+            }).on('click', (e) => {
+                L.DomEvent.stopPropagation(e);
+                openZoneInfoModal({ customZone: z });
+            }).addTo(map);
+            state.customZoneLayers.push(layer);
+        });
+    }
+
+    function updateZoneDrawPreview() {
+        if (state.drawPreviewLayer) { map.removeLayer(state.drawPreviewLayer); state.drawPreviewLayer = null; }
+        if (state.zoneDrawType === 'circle' && state.zoneCircleCenter) {
+            state.drawPreviewLayer = L.circle(state.zoneCircleCenter, {
+                radius: state.zoneDrawRadius, color: state.zoneDrawColor, weight: 2.5, dashArray: '5 5', fillColor: state.zoneDrawColor, fillOpacity: 0.2
+            }).addTo(map);
+        } else if (state.zoneDrawType === 'polygon' && state.drawPoints.length > 0) {
+            state.drawPreviewLayer = L.polygon(state.drawPoints, {
+                color: state.zoneDrawColor, weight: 2.5, dashArray: '5 5', fillColor: state.zoneDrawColor, fillOpacity: 0.2
+            }).addTo(map);
+        }
+    }
+
+    function setZoneDrawMode(mode) {
+        state.zoneDrawType = mode;
+        state.zoneCircleCenter = null;
+        state.drawPoints = [];
+        updateZoneDrawPreview();
+        const isCircle = mode === 'circle';
+        document.getElementById('btnZoneModeCircle').className = isCircle
+            ? 'px-3 py-1.5 rounded-lg bg-blue-600 text-white transition'
+            : 'px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 transition';
+        document.getElementById('btnZoneModePoly').className = !isCircle
+            ? 'px-3 py-1.5 rounded-lg bg-blue-600 text-white transition'
+            : 'px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 transition';
+        document.getElementById('zoneRadiusWrap').classList.toggle('hidden', !isCircle);
+        document.getElementById('btnZoneUndo').classList.toggle('hidden', isCircle);
+        document.getElementById('zonePtsCount').textContent = isCircle ? 'Тап по центру' : 'Точек: 0';
+    }
+
+    function startZoneDrawing() {
+        selectObject(null);
+        state.drawingZone = true;
+        document.getElementById('zoneNameInput').value = '';
+        setZoneDrawMode('circle');
+        document.getElementById('zoneDrawBar').classList.remove('hidden');
+        showToast('Отметьте центр круга или выберите «Контур»');
+    }
+
+    function addZoneDrawPoint(latlng) {
+        if (state.zoneDrawType === 'circle') {
+            state.zoneCircleCenter = [latlng.lat, latlng.lng];
+            document.getElementById('zonePtsCount').textContent = `Центр (${state.zoneDrawRadius} м)`;
+        } else {
+            state.drawPoints.push([latlng.lat, latlng.lng]);
+            document.getElementById('zonePtsCount').textContent = `Точек: ${state.drawPoints.length}`;
+        }
+        updateZoneDrawPreview();
+    }
+
+    function finishZoneDrawing(save) {
+        if (save) {
+            const name = document.getElementById('zoneNameInput').value.trim() || `Зона ${(state.cfg.customZones || []).length + 1}`;
+            if (!state.cfg.customZones) state.cfg.customZones = [];
+            if (state.zoneDrawType === 'circle') {
+                if (!state.zoneCircleCenter) { showToast('Укажите центр круга на карте'); return; }
+                state.cfg.customZones.push({
+                    id: 'cz_' + Date.now(), name, type: 'circle', color: state.zoneDrawColor,
+                    lat: state.zoneCircleCenter[0], lng: state.zoneCircleCenter[1], radius: state.zoneDrawRadius
+                });
+            } else {
+                if (state.drawPoints.length < 3) { showToast('Отметьте минимум 3 точки'); return; }
+                state.cfg.customZones.push({
+                    id: 'cz_' + Date.now(), name, type: 'polygon', color: state.zoneDrawColor, coords: state.drawPoints
+                });
+            }
+            saveConfig();
+            renderCustomZones();
+            updateZonePresence();
+            renderFavoritesStrip();
+            showToast(`Зона «${name}» сохранена`);
+        }
+        state.drawingZone = false;
+        state.zoneCircleCenter = null;
+        state.drawPoints = [];
+        updateZoneDrawPreview();
+        document.getElementById('zoneDrawBar').classList.add('hidden');
+    }
+
+    // ==================== 10. РЕНДЕР МАРКЕРОВ И ДВИЖОК ПЛАВНОСТИ 60 FPS ====================
+    function isTypeVisible(type) {
+        const f = state.cfg.mapTypeFilter || DEFAULT_CFG.mapTypeFilter;
+        return f[type] !== false;
+    }
+
+    function buildMarkerHtml(obj, zoom) {
+        const isSel = obj.id === state.selectedId;
+        const isFav = state.cfg.favorites.includes(obj.name);
+        const svgKey = getVehicleSvgKey(obj);
+        const svg = VEHICLE_SVG[svgKey] || VEHICLE_SVG.other;
+
+        const arrowHtml = (obj.speed > 0 && !obj.engineOff)
+            ? `<div class="veh-arrow" data-arrow="1" style="transform: rotate(${Math.round(obj.course)}deg);">
+                   <svg viewBox="0 0 12 12" class="w-3.5 h-3.5"><polygon points="6,0 11,11 6,8 1,11" fill="#10B981" stroke="#ffffff" stroke-width="1"/></svg>
+               </div>`
+            : '';
+
+        const deadBadge = obj.engineOff
+            ? `<span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center shadow">✕</span>`
+            : '';
+
+        const shouldShowLabel = isSel || isFav || (state.cfg.showLabels && zoom >= 12);
+        const labelText = obj.speed > 0 ? `${obj.name} · ${obj.speed} км/ч` : obj.name;
+        const labelHtml = shouldShowLabel
+            ? `<div class="veh-label" data-label="1">${isFav ? '★ ' : ''}${labelText}</div>`
+            : '';
+
+        return `
+            <div class="veh-marker ${isSel ? 'selected' : ''} ${obj.online ? '' : 'offline'}" data-svg="${svgKey}">
+                <div class="veh-icon-wrap">
+                    ${arrowHtml}
+                    ${svg}
+                    ${deadBadge}
+                </div>
+                ${labelHtml}
+            </div>
+        `;
+    }
+
+    function updateMarkerDynamic(marker, obj, zoom) {
+        const el = marker.getElement();
+        if (!el) return;
+        const wrap = el.querySelector('.veh-marker');
+        const desiredSvg = getVehicleSvgKey(obj);
+        if (!wrap || wrap.dataset.svg !== desiredSvg) {
+            el.innerHTML = buildMarkerHtml(obj, zoom);
+            return;
+        }
+        const isSel = obj.id === state.selectedId;
+        const isFav = state.cfg.favorites.includes(obj.name);
+        wrap.classList.toggle('selected', isSel);
+        wrap.classList.toggle('offline', !obj.online);
+
+        const lbl = wrap.querySelector('[data-label="1"]');
+        const shouldShowLabel = isSel || isFav || (state.cfg.showLabels && zoom >= 12);
+        if (shouldShowLabel && lbl) {
+            lbl.textContent = `${isFav ? '★ ' : ''}${obj.speed > 0 ? `${obj.name} · ${obj.speed} км/ч` : obj.name}`;
+        } else if (shouldShowLabel !== Boolean(lbl)) {
+            el.innerHTML = buildMarkerHtml(obj, zoom);
+            return;
+        }
+
+        const arr = wrap.querySelector('[data-arrow="1"]');
+        const anim = state.animPos.get(obj.id);
+        if (arr && anim) {
+            arr.style.transform = `rotate(${Math.round(anim.course)}deg)`;
+        }
+    }
+
+    function renderVisibleMarkers() {
+        if (!map) return;
+        const bounds = map.getBounds().pad(0.24);
+        const zoom = map.getZoom();
+        const useCanvasDots = zoom < 12;
+        const visibleDomIds = new Set();
+        const visibleDotIds = new Set();
+        const visibleZoneIds = new Set();
+        const maxRendered = zoom >= 14 ? 220 : 120;
+        let renderedDomCount = 0;
+
+        state.objects.forEach((obj, id) => {
+            if (!isTypeVisible(obj.type)) return;
+            if (!state.cfg.showOffline && !obj.online) return;
+
+            const isPriority = (id === state.selectedId) || state.cfg.favorites.includes(obj.name);
+            if (!isPriority && !bounds.contains([obj.lat, obj.lon])) return;
+
+            if (!state.animPos.has(id)) {
+                state.animPos.set(id, { lat: obj.lat, lon: obj.lon, course: obj.course });
+            }
+            const ap = state.animPos.get(id);
+
+            if (useCanvasDots && !isPriority) {
+                visibleDotIds.add(id);
+                const dotColor = obj.engineOff ? '#EF4444'
+                    : (obj.type === 'excavator' ? '#F97316'
+                    : (obj.type === 'fuel' ? '#0EA5E9'
+                    : (obj.speed > 0 ? '#10B981' : '#8B5CF6')));
+
+                if (state.canvasDots.has(id)) {
+                    const d = state.canvasDots.get(id);
+                    d.setLatLng([ap.lat, ap.lon]);
+                    d.setStyle({ fillColor: dotColor });
+                } else {
+                    const dot = L.circleMarker([ap.lat, ap.lon], {
+                        radius: 4.5, color: '#ffffff', weight: 1, fillColor: dotColor, fillOpacity: 0.92, renderer: canvasRenderer
+                    }).on('click', (e) => {
+                        L.DomEvent.stopPropagation(e);
+                        selectObject(id, true);
+                    }).addTo(map);
+                    state.canvasDots.set(id, dot);
+                }
+                return;
+            }
+
+            if (!isPriority && renderedDomCount >= maxRendered) return;
+            visibleDomIds.add(id);
+            renderedDomCount++;
+
+            if (state.markers.has(id)) {
+                const m = state.markers.get(id);
+                if (!state.cfg.smooth) m.setLatLng([obj.lat, obj.lon]);
+                updateMarkerDynamic(m, obj, zoom);
+                m.setZIndexOffset(id === state.selectedId ? 1000 : (isPriority ? 500 : 0));
+            } else {
+                const icon = L.divIcon({
+                    className: '', html: buildMarkerHtml(obj, zoom), iconSize: [42, 42], iconAnchor: [21, 21]
+                });
+                const marker = L.marker([ap.lat, ap.lon], {
+                    icon, zIndexOffset: id === state.selectedId ? 1000 : (isPriority ? 500 : 0)
+                }).addTo(map);
+                marker.on('click', (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    selectObject(id, false);
+                });
+                state.markers.set(id, marker);
+            }
+
+            if (state.cfg.showExcZones && (obj.type === 'excavator' || obj.type === 'fuel')) {
+                visibleZoneIds.add(id);
+                const color = obj.type === 'excavator' ? '#EA580C' : '#0284C7';
+                if (state.zoneCircles.has(id)) {
+                    const c = state.zoneCircles.get(id);
+                    c.setLatLng([obj.lat, obj.lon]);
+                    c.setRadius(state.cfg.zoneRadius);
+                } else {
+                    const circle = L.circle([obj.lat, obj.lon], {
+                        radius: state.cfg.zoneRadius, color, weight: 1.8, dashArray: '6 5', fillColor: color, fillOpacity: 0.14, interactive: true, renderer: canvasRenderer
+                    }).on('click', (e) => {
+                        L.DomEvent.stopPropagation(e);
+                        openZoneInfoModal({ centerObj: obj });
+                    }).addTo(map);
+                    state.zoneCircles.set(id, circle);
+                }
+            }
+        });
+
+        state.markers.forEach((m, id) => { if (!visibleDomIds.has(id)) { map.removeLayer(m); state.markers.delete(id); } });
+        state.canvasDots.forEach((d, id) => { if (!visibleDotIds.has(id)) { map.removeLayer(d); state.canvasDots.delete(id); } });
+        state.zoneCircles.forEach((c, id) => { if (!state.cfg.showExcZones || !visibleZoneIds.has(id)) { map.removeLayer(c); state.zoneCircles.delete(id); } });
+    }
+
+    // Движок плавного движения 30/60 FPS + прогноз движения + слежение камеры
+    function animationLoop(now) {
+        requestAnimationFrame(animationLoop);
+
+        const targetInterval = 1000 / (state.cfg.fps || 60);
+        const dtMs = now - state.lastFrameTime;
+        if (dtMs < targetInterval * 0.85) return;
+        state.lastFrameTime = now;
+
+        // Подсчёт реального FPS
+        state.fpsFrames++;
+        if (now - state.fpsLastCheck >= 1000) {
+            state.perf.fps = Math.round(state.fpsFrames * 1000 / (now - state.fpsLastCheck));
+            state.fpsFrames = 0;
+            state.fpsLastCheck = now;
+            const perfEl = document.getElementById('perf-line');
+            if (perfEl && state.activeTab === 'settings') {
+                perfEl.textContent = `Сеть: ${state.perf.netMs} мс · Парсинг: ${state.perf.parseMs} мс · ${state.perf.kb} КБ · ${state.perf.fps} FPS`;
+            }
+        }
+
+        if (state.activeTab !== 'map' || !map || !state.cfg.smooth) return;
+
+        const dtSec = Math.min(0.1, dtMs / 1000);
+        const alpha = 1 - Math.exp(-dtSec / 0.42); // tau = 0.42 с
+
+        state.markers.forEach((marker, id) => {
+            const obj = state.objects.get(id);
+            if (!obj) return;
+            let ap = state.animPos.get(id);
+            if (!ap) {
+                ap = { lat: obj.lat, lon: obj.lon, course: obj.course };
+                state.animPos.set(id, ap);
+            }
+
+            let targetLat = obj.lat;
+            let targetLon = obj.lon;
+
+            // Прогноз движения по скорости и курсу (мягкое затухание до 2.4 сек)
+            if (state.cfg.predictMotion && obj.speed > 2 && !obj.engineOff && obj.type !== 'excavator') {
+                const ageSec = Math.min(2.4, Math.max(0, (now - (obj.updatedAtMs || now)) / 1000));
+                const damp = ageSec * (1 - ageSec / 4.8);
+                const distM = (obj.speed / 3.6) * damp;
+                const rad = obj.course * Math.PI / 180;
+                targetLat += (distM * Math.cos(rad)) / 111320;
+                targetLon += (distM * Math.sin(rad)) / (111320 * Math.cos(obj.lat * Math.PI / 180));
+            }
+
+            ap.lat += (targetLat - ap.lat) * alpha;
+            ap.lon += (targetLon - ap.lon) * alpha;
+            ap.course = ap.course + (unwrapAngle(ap.course, obj.course) - ap.course) * alpha;
+
+            marker.setLatLng([ap.lat, ap.lon]);
+
+            // Синхронное плавное слежение камеры
+            if (id === state.selectedId && state.cfg.followSelected && now > state.followPausedUntil && state.trackPoints.length === 0) {
+                const pTarget = map.latLngToContainerPoint([ap.lat, ap.lon]);
+                const c = map.getSize().divideBy(2);
+                const dx = pTarget.x - c.x;
+                const dy = pTarget.y - c.y;
+                if (Math.abs(dx) > 1.5 || Math.abs(dy) > 1.5) {
+                    map.panBy([dx * 0.14, dy * 0.14], { animate: false });
+                }
+            }
+        });
+    }
+
+    // ==================== 11. ИЗБРАННОЕ С DRAG & DROP ====================
+    function renderFavoritesStrip() {
+        const container = document.getElementById('favoritesStrip');
+        if (!container) return;
+
+        const allObjs = Array.from(state.objects.values());
+        const fuelTrucks = allObjs.filter(o => o.type === 'fuel' && o.online);
+        const excavators = allObjs.filter(o => o.type === 'excavator' && o.online);
+
+        const favObjs = [];
+        state.cfg.favorites.forEach(favName => {
+            const found = allObjs.find(o => o.name === favName);
+            if (found) favObjs.push(found);
+        });
+
+        if (favObjs.length === 0) { container.innerHTML = ''; return; }
+
+        container.innerHTML = favObjs.map((obj, idx) => {
+            const isSel = obj.id === state.selectedId;
+            let statusIcon = (obj.online && !obj.engineOff)
+                ? `<span class="w-2 h-2 rounded-full ${obj.speed > 0 ? 'bg-emerald-500' : 'bg-purple-500'}"></span>`
+                : `<span class="text-rose-500 text-[11px] leading-none font-black">✕</span>`;
+
+            let extraHtml = '';
+            if (obj.type === 'excavator') {
+                const st = getZoneQueueStats(`hub_${obj.id}`);
+                if (obj.speed === 0) statusIcon = `<span class="text-rose-500 text-[11px] leading-none font-black">✕</span>`;
+                extraHtml = `<div class="text-[10px] font-bold text-orange-600 dark:text-orange-400 mt-0.5">🚛 ${st.count}${st.count > 0 ? ` · макс ${formatDurationSec(st.maxSec)}` : ' шт.'}</div>`;
+            } else if (obj.type === 'belaz') {
+                const nearFuel = fuelTrucks.find(f => distMeters(obj.lat, obj.lon, f.lat, f.lon) <= state.cfg.zoneRadius + 40);
+                const nearExc = !nearFuel ? excavators.find(e => distMeters(obj.lat, obj.lon, e.lat, e.lon) <= state.cfg.zoneRadius + 25) : null;
+                const cZone = (!nearFuel && !nearExc) ? getObjectCustomZone(obj) : null;
+                if (nearFuel) extraHtml = `<div class="text-[10px] font-bold text-sky-600 dark:text-sky-400 mt-0.5 truncate max-w-[140px]">⛽ ${nearFuel.name}</div>`;
+                else if (nearExc) extraHtml = `<div class="text-[10px] font-bold text-orange-600 dark:text-orange-400 mt-0.5 truncate max-w-[140px]">⛏️ ${nearExc.name}</div>`;
+                else if (cZone) extraHtml = `<div class="text-[10px] font-bold mt-0.5 truncate max-w-[140px]" style="color:${cZone.color || '#9333EA'}">📌 ${cZone.name}</div>`;
+            }
+
+            return `
+                <button data-fav-idx="${idx}" data-obj-id="${obj.id}" class="fav-tile lg-glass shrink-0 px-3 py-1.5 rounded-2xl text-left active:scale-95 ${isSel ? 'ring-2 ring-blue-500' : ''}">
+                    <div class="flex items-center gap-1.5 text-xs font-extrabold whitespace-nowrap">
+                        <span class="text-amber-500">★</span>
+                        ${statusIcon}
+                        <span>${obj.name}</span>
+                        ${obj.type !== 'excavator' ? `<span class="text-emerald-600 dark:text-emerald-400 ml-0.5">${obj.speed}</span>` : ''}
+                    </div>
+                    ${extraHtml}
+                </button>
+            `;
+        }).join('');
+
+        attachFavoritesDragHandlers(container);
+    }
+
+    function attachFavoritesDragHandlers(container) {
+        let dragTimer = null, draggingIdx = null, draggedEl = null, wasDragged = false;
+
+        container.querySelectorAll('.fav-tile').forEach(tile => {
+            const idx = Number(tile.dataset.favIdx);
+            const objId = tile.dataset.objId;
+
+            const startPress = () => {
+                wasDragged = false;
+                dragTimer = setTimeout(() => {
+                    draggingIdx = idx;
+                    draggedEl = tile;
+                    wasDragged = true;
+                    tile.classList.add('fav-dragging', 'ring-2', 'ring-blue-500');
+                    if (navigator.vibrate) navigator.vibrate(25);
+                }, 380);
+            };
+            const movePress = (e) => {
+                if (draggingIdx === null) {
+                    if (dragTimer) { clearTimeout(dragTimer); dragTimer = null; }
+                    return;
+                }
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const tiles = Array.from(container.querySelectorAll('.fav-tile'));
+                for (let i = 0; i < tiles.length; i++) {
+                    const rect = tiles[i].getBoundingClientRect();
+                    if (clientX >= rect.left && clientX <= rect.right && i !== draggingIdx) {
+                        const moved = state.cfg.favorites.splice(draggingIdx, 1)[0];
+                        state.cfg.favorites.splice(i, 0, moved);
+                        draggingIdx = i;
+                        saveConfig();
+                        renderFavoritesStrip();
+                        return;
+                    }
+                }
+            };
+            const endPress = () => {
+                if (dragTimer) { clearTimeout(dragTimer); dragTimer = null; }
+                if (draggedEl) { draggedEl.classList.remove('fav-dragging'); draggedEl = null; }
+                draggingIdx = null;
+            };
+
+            tile.addEventListener('touchstart', startPress, { passive: true });
+            tile.addEventListener('touchmove', movePress, { passive: true });
+            tile.addEventListener('touchend', endPress);
+            tile.addEventListener('mousedown', startPress);
+            tile.addEventListener('mousemove', movePress);
+            tile.addEventListener('mouseup', endPress);
+            tile.addEventListener('click', () => { if (!wasDragged) focusObjectById(objId); });
+        });
+    }
+
+    // ==================== 12. ВЫБОР ОБЪЕКТА, БАЛЛУН (С ПРОСТОЕМ) И НИЖНЯЯ ПАНЕЛЬ ====================
+    window.focusObjectById = function(id) {
+        switchTab('map');
+        selectObject(id, true);
+    };
+
+    window.closeVehiclePopup = function() {
+        if (state.activePopup) { map.closePopup(state.activePopup); state.activePopup = null; }
+    };
+
+    function openVehiclePopup(obj) {
+        const isFav = state.cfg.favorites.includes(obj.name);
+        const zName = getObjectZoneName(obj);
+        const distStr = state.userLatLng ? ` · ${formatDistShort(distMeters(state.userLatLng[0], state.userLatLng[1], obj.lat, obj.lon))}` : '';
+
+        let statusRight = obj.speed > 0 ? `${obj.speed} км/ч` : 'Стоянка';
+        let idleBlock = '';
+
+        // Спец-карточка неактивного/заглушённого БелАЗа (v17)
+        if (obj.engineOff) {
+            statusRight = obj.massOff ? '✕ Выключена масса' : '✕ ДВС заглушен';
+            const stopDur = obj.stoppedSinceMs ? formatDurationSec((Date.now() - obj.stoppedSinceMs) / 1000) : '—';
+            const stopTimeStr = obj.stoppedSinceMs ? new Date(obj.stoppedSinceMs).toTimeString().slice(0, 8) : obj.time;
+            idleBlock = `
+                <div class="rounded-xl p-2 bg-rose-500/12 border border-rose-500/25 text-[11px] mb-2.5 space-y-0.5">
+                    <div class="flex justify-between"><span class="text-slate-500 dark:text-slate-400">Остановка:</span><span class="font-bold font-mono">${stopTimeStr}</span></div>
+                    <div class="flex justify-between"><span class="text-slate-500 dark:text-slate-400">Стоит уже:</span><span class="font-extrabold text-rose-600 dark:text-rose-400">${stopDur}</span></div>
+                </div>`;
+        }
+
+        const html = `
+            <div class="p-3.5">
+                <div class="flex items-center justify-between gap-2 mb-1.5">
+                    <div class="flex items-center gap-1.5 font-extrabold text-[13.5px] truncate">
+                        ${isFav ? '<span class="text-amber-500">★</span>' : ''}
+                        <span>${VEHICLE_EMOJI[obj.type] || '🚗'}</span>
+                        <span class="truncate">${obj.name}</span>
+                    </div>
+                    <button onclick="closeVehiclePopup()" class="text-slate-400 hover:text-slate-600 text-sm font-bold px-1">✕</button>
+                </div>
+                <div class="flex items-center justify-between text-xs mb-1.5">
+                    <span class="text-slate-500 dark:text-slate-400 font-medium">${obj.time}${distStr}</span>
+                    <span class="font-extrabold ${obj.engineOff ? 'text-rose-500' : ''}">${statusRight}</span>
+                </div>
+                ${zName !== 'Вне геозон' ? `<div class="text-[11px] font-bold text-blue-600 dark:text-blue-400 mb-2 truncate">📌 ${zName}</div>` : ''}
+                ${idleBlock}
+                <button onclick="openInfoSheet()" class="w-full py-2.5 px-3 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition">
+                    <span class="w-4 h-4 rounded bg-white/25 flex items-center justify-center text-[10px] font-serif">i</span>
+                    <span>Подробная информация</span>
+                </button>
+            </div>
+        `;
+
+        closeVehiclePopup();
+        state.activePopup = L.popup({ offset: [0, -24], closeButton: false, autoPan: false })
+            .setLatLng([obj.lat, obj.lon])
+            .setContent(html)
+            .openOn(map);
+    }
+
+    function selectObject(id, fly = false) {
+        state.selectedId = id;
+        state.followPausedUntil = 0;
+        const card = document.getElementById('selectedCard');
+
+        if (!id || !state.objects.has(id)) {
+            card.classList.add('hidden');
+            closeVehiclePopup();
+            renderVisibleMarkers();
+            renderFavoritesStrip();
+            return;
+        }
+
+        const obj = state.objects.get(id);
+        updateSelectedCard(obj);
+        if (state.trackPoints.length === 0 && !state.drawingZone) {
+            card.classList.remove('hidden');
+        }
+
+        if (fly && map) {
+            map.setView([obj.lat, obj.lon], Math.max(map.getZoom(), 15), { animate: true });
+        }
+        openVehiclePopup(obj);
+        renderVisibleMarkers();
+        renderFavoritesStrip();
+    }
+
+    function updateSelectedCard(obj) {
+        document.getElementById('cardName').textContent = obj.name;
+        document.getElementById('cardEmoji').textContent = VEHICLE_EMOJI[obj.type] || '🚗';
+        document.getElementById('cardTime').textContent = obj.time;
+        const zName = getObjectZoneName(obj);
+        document.getElementById('cardZoneInfo').textContent = zName !== 'Вне геозон' ? `· ${zName}` : '';
+        document.getElementById('cardDistInfo').textContent = state.userLatLng
+            ? `· ${formatDistShort(distMeters(state.userLatLng[0], state.userLatLng[1], obj.lat, obj.lon))}`
+            : '';
+
+        const dot = document.getElementById('cardStatusDot');
+        if (obj.engineOff || (obj.type === 'excavator' && obj.speed === 0)) {
+            dot.className = 'text-rose-500 text-xs font-black leading-none shrink-0';
+            dot.textContent = '✕';
+        } else {
+            dot.textContent = '';
+            dot.className = `w-2.5 h-2.5 rounded-full shrink-0 ${obj.speed > 0 ? 'bg-emerald-500' : 'bg-purple-500'}`;
+        }
+
+        const isExc = obj.type === 'excavator';
+        document.getElementById('cardBodyVehicle').classList.toggle('hidden', isExc);
+        document.getElementById('cardBodyExcavator').classList.toggle('hidden', !isExc);
+
+        if (isExc) {
+            const st = getZoneQueueStats(`hub_${obj.id}`);
+            document.getElementById('cardExcQueueTitle').textContent = `Очередь (${state.cfg.zoneRadius} м)`;
+            document.getElementById('cardExcQueueVal').textContent = `${st.count} шт. · ср ${formatDurationSec(st.avgSec)} / макс ${formatDurationSec(st.maxSec)}`;
+            document.getElementById('cardExcSpeed').textContent = `${obj.speed} км/ч`;
+        } else {
+            const shift = getCurrentShiftInfo();
+            document.getElementById('cardFuel').textContent = obj.fuel;
+            document.getElementById('cardWeightLabel').textContent = obj.weight >= 45 ? 'Вес (груж.)' : 'Вес (пор.)';
+            document.getElementById('cardWeight').textContent = `${obj.weight} т`;
+            document.getElementById('cardSpeed').textContent = `${obj.speed} км/ч`;
+            document.getElementById('cardShiftLabel').textContent = `Рейсы (${shift.label})`;
+            document.getElementById('cardTrips').textContent = obj.trips;
+            document.getElementById('cardMileage').textContent = `${obj.mileage} км`;
+        }
+
+        const isFav = state.cfg.favorites.includes(obj.name);
+        document.getElementById('btnCardFav').textContent = isFav ? '★' : '☆';
+        document.getElementById('btnCardFollow').className = state.cfg.followSelected
+            ? 'w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center shadow active:scale-90 transition'
+            : 'w-9 h-9 rounded-full bg-slate-200/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center active:scale-90 transition';
+    }
+
+    // ==================== 13. ЗАГРУЗКА ДАННЫХ И РАЗДЕЛЬНЫЕ ТАЙМЕРЫ ====================
+    function setStatusBadge(mode) {
+        const icon = document.getElementById('statusBadgeIcon');
+        const btn = document.getElementById('btnOnlineBadge');
+        if (!icon || !btn) return;
+        if (mode === 'ok') {
+            icon.textContent = '●';
+            btn.className = 'bg-emerald-500/95 hover:bg-emerald-600 text-white px-3.5 h-11 rounded-full shadow-lg flex items-center gap-1.5 font-extrabold text-sm shrink-0 active:scale-95 transition-transform';
+        } else if (mode === 'warn') {
+            icon.textContent = '⚠';
+            btn.className = 'bg-amber-500/95 text-white px-3.5 h-11 rounded-full shadow-lg flex items-center gap-1.5 font-extrabold text-sm shrink-0 active:scale-95 transition-transform';
+        } else {
+            icon.textContent = '⟳';
+            btn.className = 'bg-blue-600/95 text-white px-3.5 h-11 rounded-full shadow-lg flex items-center gap-1.5 font-extrabold text-sm shrink-0 active:scale-95 transition-transform';
+        }
+    }
+
+    async function fetchObjects(manual = false, onlyId = null) {
+        if (!manual && state.trackPoints.length > 0) return;
+        if (state.isFetching && !onlyId) return;
+        if (!onlyId) state.isFetching = true;
+
+        const icon = document.getElementById('refreshIcon');
+        if (icon && !onlyId) icon.classList.add('animate-spin');
+
+        try {
+            if (state.cfg.demoMode) {
+                initDemoFleet();
+                stepDemoFleet(onlyId);
+                document.getElementById('objModeBadge').textContent = 'Demo 623';
+            } else {
+                if (manual) logMsg(`Подключение к ${state.cfg.server}...`);
+                const fromDT = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 19);
+                const xml = await callSoap('GetObjectsListMobile', {
+                    userName: state.cfg.login,
+                    userPsw: state.cfg.password,
+                    fromDT
+                });
+                const parsed = parseObjectsXml(xml);
+                if (parsed.length === 0) throw new Error('Сервер вернул 0 объектов');
+                if (onlyId) {
+                    const one = parsed.find(o => o.id === onlyId);
+                    if (one) state.objects.set(one.id, one);
+                } else {
+                    state.objects.clear();
+                    parsed.forEach(o => state.objects.set(o.id, o));
+                }
+                document.getElementById('objModeBadge').textContent = 'Live SOAP';
+                if (manual) {
+                    logMsg(`Загружено объектов: ${parsed.length} (${state.perf.netMs} мс, ${state.perf.kb} КБ)`);
+                    showToast(`Обновлено: ${parsed.length} ед.`);
+                }
+            }
+
+            state.failCount = 0;
+            setStatusBadge('ok');
+            updateZonePresence();
+
+            let onlineCount = 0;
+            state.objects.forEach(o => { if (o.online && isTypeVisible(o.type)) onlineCount++; });
+            document.getElementById('onlineCountBadge').textContent = onlineCount;
+
+            renderVisibleMarkers();
+            if (!onlyId) renderFavoritesStrip();
+
+            if (state.selectedId && state.objects.has(state.selectedId)) {
+                updateSelectedCard(state.objects.get(state.selectedId));
+            }
+            if (!onlyId && state.activeTab === 'objects') {
+                renderObjectsList();
+            }
+        } catch (err) {
+            state.failCount++;
+            logMsg(`Ошибка запроса (${state.failCount}): ${err.message}`);
+            setStatusBadge(state.failCount >= 3 ? 'reconnect' : 'warn');
+
+            if (!state.cfg.demoMode) {
+                logMsg('CORS в браузере (в Android APK работает напрямую) → Демо-режим 623 ед.');
+                state.cfg.demoMode = true;
+                const demoCb = document.getElementById('setDemoMode');
+                if (demoCb) demoCb.checked = true;
+                initDemoFleet();
+                updateZonePresence();
+                setStatusBadge('ok');
+                document.getElementById('objModeBadge').textContent = 'Demo 623';
+                showToast('Демо-режим карьера (в Android APK — прямой SOAP)');
+
+                let onlineCount = 0;
+                state.objects.forEach(o => { if (o.online) onlineCount++; });
+                document.getElementById('onlineCountBadge').textContent = onlineCount;
+                renderVisibleMarkers();
+                renderFavoritesStrip();
+                if (state.activeTab === 'objects') renderObjectsList();
+            }
+        } finally {
+            if (!onlyId) state.isFetching = false;
+            if (icon && !onlyId) icon.classList.remove('animate-spin');
+        }
+    }
+
+    function restartAutoRefresh() {
+        if (state.refreshTimer) clearInterval(state.refreshTimer);
+        if (state.selRefreshTimer) clearInterval(state.selRefreshTimer);
+
+        if (state.cfg.autoRefresh) {
+            state.refreshTimer = setInterval(() => fetchObjects(false, null), Math.max(1, state.cfg.refreshInterval) * 1000);
+            state.selRefreshTimer = setInterval(() => {
+                if (state.selectedId && state.activeTab === 'map' && state.trackPoints.length === 0) {
+                    fetchObjects(false, state.selectedId);
+                }
+            }, Math.max(1, state.cfg.selInterval) * 1000);
+        }
+    }
+
+    // ==================== 14. ВКЛАДКА «ОБЪЕКТЫ» ====================
+    function renderObjectsList() {
+        const container = document.getElementById('objectsListContainer');
+        if (!container) return;
+        const q = (document.getElementById('objSearchInput').value || '').trim().toLowerCase();
+        const filtered = [];
+        const typeCounts = { all: 0, fav: 0, belaz: 0, excavator: 0, bulldozer: 0, grader: 0, fuel: 0, other: 0 };
+
+        state.objects.forEach(obj => {
+            if (!isTypeVisible(obj.type)) return;
+            typeCounts.all++;
+            if (state.cfg.favorites.includes(obj.name)) typeCounts.fav++;
+            if (typeCounts[obj.type] != null) typeCounts[obj.type]++;
+
+            if (state.typeFilter === 'fav' && !state.cfg.favorites.includes(obj.name)) return;
+            if (state.typeFilter !== 'all' && state.typeFilter !== 'fav' && obj.type !== state.typeFilter) return;
+            if (state.connFilter === 'online' && !obj.online) return;
+            if (state.connFilter === 'offline' && obj.online) return;
+            if (state.actFilter === 'moving' && (!obj.online || obj.speed <= 0)) return;
+            if (state.actFilter === 'stopped' && (!obj.online || obj.speed > 0)) return;
+            if (q && !obj.name.toLowerCase().includes(q) && !obj.address.toLowerCase().includes(q)) return;
+            filtered.push(obj);
+        });
+
+        document.querySelectorAll('#tab-objects [data-cnt]').forEach(el => {
+            const k = el.dataset.cnt;
+            el.textContent = typeCounts[k] != null ? `(${typeCounts[k]})` : '';
+        });
+
+        filtered.sort((a, b) => {
+            const aFav = state.cfg.favorites.indexOf(a.name);
+            const bFav = state.cfg.favorites.indexOf(b.name);
+            if (aFav !== -1 || bFav !== -1) {
+                if (aFav === -1) return 1;
+                if (bFav === -1) return -1;
+                return aFav - bFav;
+            }
+            if (a.online !== b.online) return a.online ? -1 : 1;
+            return b.speed - a.speed;
+        });
+
+        document.getElementById('objListHeaderCount').textContent = `(${filtered.length})`;
+        if (filtered.length === 0) {
+            container.innerHTML = `<div class="text-center py-12 text-sm text-slate-400 font-semibold">Техника не найдена</div>`;
+            return;
+        }
+
+        const slice = filtered.slice(0, state.objListLimit);
+        let html = slice.map(obj => {
+            const isFav = state.cfg.favorites.includes(obj.name);
+            const badgeHtml = obj.engineOff
+                ? `<span class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-rose-600 text-white text-[8px] font-black flex items-center justify-center ring-2 ring-white dark:ring-slate-900">✕</span>`
+                : `<span class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ${obj.speed > 0 ? 'bg-emerald-500' : 'bg-purple-500'} ring-2 ring-white dark:ring-slate-900"></span>`;
+
+            return `
+                <div onclick="focusObjectById('${obj.id}')" class="lg-card rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-2 active:scale-[0.99] transition cursor-pointer">
+                    <div class="flex items-center gap-3 min-w-0 flex-1">
+                        <div class="relative shrink-0 w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-lg">
+                            ${VEHICLE_EMOJI[obj.type] || '🚗'}
+                            ${badgeHtml}
+                        </div>
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-1.5">
+                                ${isFav ? '<span class="text-amber-500 text-xs">★</span>' : ''}
+                                <span class="text-sm font-extrabold truncate">${obj.name}</span>
+                                ${obj.type === 'belaz' && obj.weight >= 45 ? '<span class="text-[9.5px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-bold">груж.</span>' : ''}
+                            </div>
+                            <div class="text-[11px] text-slate-500 dark:text-slate-400 truncate">${obj.address}</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <div class="text-right">
+                            <div class="text-xs font-extrabold ${obj.engineOff ? 'text-rose-500' : (obj.speed > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500')}">
+                                ${obj.online ? (obj.speed > 0 ? `${obj.speed} км/ч` : (obj.engineOff ? 'Заглушен' : 'Стоит')) : 'Нет связи'}
+                            </div>
+                            <div class="text-[10px] text-slate-400 font-mono">${obj.time}</div>
+                        </div>
+                        <button onclick="event.stopPropagation(); openActionSheetForId('${obj.id}')" class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center active:scale-90 transition">⋯</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        if (filtered.length > state.objListLimit) {
+            html += `<button onclick="state.objListLimit += 120; renderObjectsList();" class="w-full py-3 rounded-2xl lg-card text-xs font-extrabold text-blue-600 dark:text-blue-400 active:scale-[0.99] transition">Показать ещё (${filtered.length - state.objListLimit})</button>`;
+        }
+        container.innerHTML = html;
+    }
+
+    // ==================== 15. ШТОРКИ: ФИЛЬТР, СВОДКА, ЗОНЫ, ДЕЙСТВИЯ, ТРЕК, ДАТЧИКИ ====================
+    function openMapFilterModal() {
+        const counts = { belaz: 0, excavator: 0, bulldozer: 0, grader: 0, fuel: 0, other: 0 };
+        state.objects.forEach(o => { if (counts[o.type] != null) counts[o.type]++; });
+
+        const listEl = document.getElementById('mapFilterList');
+        listEl.innerHTML = CATEGORY_META.map(cat => {
+            const checked = isTypeVisible(cat.key);
+            return `
+                <label class="lg-card rounded-2xl px-3.5 py-2.5 flex items-center justify-between cursor-pointer">
+                    <div class="flex items-center gap-2.5">
+                        <span class="text-xl">${cat.emoji}</span>
+                        <div>
+                            <div class="text-xs font-extrabold">${cat.label}</div>
+                            <div class="text-[10.5px] text-slate-500 dark:text-slate-400 font-semibold">${counts[cat.key]} ед.</div>
+                        </div>
+                    </div>
+                    <label class="ios-switch">
+                        <input type="checkbox" class="map-type-cb" data-cat="${cat.key}" ${checked ? 'checked' : ''} />
+                        <span class="ios-slider"></span>
+                    </label>
+                </label>
+            `;
+        }).join('');
+
+        listEl.querySelectorAll('.map-type-cb').forEach(cb => {
+            cb.addEventListener('change', () => {
+                state.cfg.mapTypeFilter[cb.dataset.cat] = cb.checked;
+                saveConfig();
+                updateFilterDot();
+                renderVisibleMarkers();
+                if (state.activeTab === 'objects') renderObjectsList();
+            });
+        });
+
+        document.getElementById('mapFilterModal').classList.remove('hidden');
+    }
+
+    function updateFilterDot() {
+        const allOn = Object.values(state.cfg.mapTypeFilter).every(Boolean);
+        document.getElementById('filterActiveDot').classList.toggle('hidden', allOn);
+        const objDot = document.getElementById('objFilterActiveDot');
+        if (objDot) objDot.classList.toggle('hidden', allOn);
+    }
+
+    window.openActionSheetForId = function(id) {
+        state.selectedId = id;
+        openActionSheet();
+    };
+
+    function openActionSheet() {
+        if (!state.selectedId || !state.objects.has(state.selectedId)) return;
+        const obj = state.objects.get(state.selectedId);
+        document.getElementById('actSheetEmoji').textContent = VEHICLE_EMOJI[obj.type] || '🚗';
+        document.getElementById('actSheetTitle').textContent = obj.name;
+        document.getElementById('actSheetSub').textContent = `${obj.speed} км/ч · ${obj.time}`;
+        document.getElementById('actSheetCoords').textContent = `${obj.lat.toFixed(6)}, ${obj.lon.toFixed(6)}`;
+        document.getElementById('btnActFav').textContent = state.cfg.favorites.includes(obj.name) ? '★' : '☆';
+        document.getElementById('actionSheetModal').classList.remove('hidden');
+    }
+
+    function openFleetSummaryModal() {
+        let moving = 0, stopped = 0, offline = 0;
+        const hubs = [];
+        const allObjs = Array.from(state.objects.values());
+
+        allObjs.forEach(o => {
+            if (!o.online) offline++;
+            else if (o.speed > 0) moving++;
+            else stopped++;
+
+            if (o.online && (o.type === 'excavator' || o.type === 'fuel')) {
+                const st = getZoneQueueStats(`hub_${o.id}`);
+                if (st.count > 0 || state.cfg.favorites.includes(o.name)) {
+                    hubs.push({ title: `${VEHICLE_EMOJI[o.type]} ${o.name}`, objId: o.id, count: st.count, maxSec: st.maxSec });
+                }
+            }
+        });
+
+        (state.cfg.customZones || []).forEach(cz => {
+            const st = getZoneQueueStats(`cz_${cz.id}`);
+            if (st.count > 0) {
+                hubs.push({ title: `📌 ${cz.name}`, czId: cz.id, count: st.count, maxSec: st.maxSec });
+            }
+        });
+
+        hubs.sort((a, b) => (b.count - a.count) || (b.maxSec - a.maxSec));
+
+        document.getElementById('summarySubtitle').textContent = `Всего: ${allObjs.length} ед. · Радиус: ${state.cfg.zoneRadius} м`;
+        document.getElementById('sumMoving').textContent = moving;
+        document.getElementById('sumStopped').textContent = stopped;
+        document.getElementById('sumOffline').textContent = offline;
+
+        const qEl = document.getElementById('summaryQueuesList');
+        if (hubs.length === 0) {
+            qEl.innerHTML = '<div class="text-xs text-slate-400 text-center py-4">Очередей сейчас нет</div>';
+        } else {
+            qEl.innerHTML = hubs.slice(0, 35).map(h => {
+                const action = h.objId
+                    ? `document.getElementById('fleetSummaryModal').classList.add('hidden'); focusObjectById('${h.objId}')`
+                    : `document.getElementById('fleetSummaryModal').classList.add('hidden'); openCustomZoneById('${h.czId}')`;
+                return `
+                    <button onclick="${action}" class="w-full lg-card rounded-2xl px-3.5 py-2.5 flex items-center justify-between active:scale-[0.99] transition">
+                        <span class="text-xs font-extrabold truncate">${h.title}</span>
+                        <span class="px-2.5 py-1 rounded-full text-[11px] font-extrabold ${h.count > 0 ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400' : 'bg-slate-200/70 dark:bg-slate-800 text-slate-500'}">
+                            🚛 ${h.count}${h.count > 0 ? ` · макс ${formatDurationSec(h.maxSec)}` : ''}
+                        </span>
+                    </button>
+                `;
+            }).join('');
+        }
+        document.getElementById('fleetSummaryModal').classList.remove('hidden');
+    }
+
+    window.openCustomZoneById = function(czId) {
+        const z = (state.cfg.customZones || []).find(item => item.id === czId);
+        if (z) openZoneInfoModal({ customZone: z });
+    };
+
+    function openZoneInfoModal({ centerObj, customZone }) {
+        const editBar = document.getElementById('zoneInfoEditActions');
+        let stats = { count: 0, avgSec: 0, maxSec: 0, items: [] };
+
+        if (customZone) {
+            state.activeEditZoneId = customZone.id;
+            document.getElementById('zoneInfoTitle').textContent = `📌 ${customZone.name}`;
+            document.getElementById('zoneRenameInput').value = customZone.name;
+            editBar.classList.remove('hidden');
+            stats = getZoneQueueStats(`cz_${customZone.id}`);
+        } else if (centerObj) {
+            state.activeEditZoneId = null;
+            editBar.classList.add('hidden');
+            document.getElementById('zoneInfoTitle').textContent = `${VEHICLE_EMOJI[centerObj.type]} ${centerObj.name} (${state.cfg.zoneRadius} м)`;
+            stats = getZoneQueueStats(`hub_${centerObj.id}`);
+        }
+
+        document.getElementById('zoneInfoSub').textContent = `Техники внутри: ${stats.count}`;
+        document.getElementById('zStatCount').textContent = `${stats.count} шт.`;
+        document.getElementById('zStatAvg').textContent = formatDurationSec(stats.avgSec);
+        document.getElementById('zStatMax').textContent = formatDurationSec(stats.maxSec);
+
+        const listEl = document.getElementById('zoneInfoList');
+        if (stats.items.length === 0) {
+            listEl.innerHTML = '<div class="text-xs text-slate-400 text-center py-6">Внутри зоны техники нет</div>';
+        } else {
+            listEl.innerHTML = stats.items.map((item, idx) => {
+                const o = item.obj;
+                const mins = item.waitSec / 60;
+                const pillCls = mins > 10
+                    ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                    : (mins >= 4 ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400' : 'bg-blue-500/15 text-blue-600 dark:text-blue-400');
+                const loadTag = o.type === 'belaz' ? (o.weight >= 45 ? 'груж.' : 'порожн.') : '';
+                return `
+                    <button onclick="document.getElementById('zoneInfoModal').classList.add('hidden'); focusObjectById('${o.id}')" class="w-full lg-card rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-2 active:scale-[0.99] transition">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span class="text-[11px] font-black text-slate-400 w-4">${idx + 1}.</span>
+                            <span class="text-xs font-extrabold truncate">${VEHICLE_EMOJI[o.type]} ${o.name}</span>
+                            ${loadTag ? `<span class="text-[10px] font-bold text-slate-500">${loadTag}</span>` : ''}
+                        </div>
+                        <span class="px-2 py-0.5 rounded-full text-[11px] font-extrabold shrink-0 ${pillCls}">${formatDurationSec(item.waitSec)}</span>
+                    </button>
+                `;
+            }).join('');
+        }
+        document.getElementById('zoneInfoModal').classList.remove('hidden');
+    }
+
+    // --- История маршрута и плеер ---
+    function toLocalInputVal(date) {
+        const pad = n => String(n).padStart(2, '0');
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    function applyHistoryPreset(preset) {
+        const now = new Date();
+        let from = new Date(now);
+        let to = new Date(now);
+        if (preset === '3h') from = new Date(now.getTime() - 3 * 3600 * 1000);
+        else if (preset === '12h') from = new Date(now.getTime() - 12 * 3600 * 1000);
+        else if (preset === 'today') from.setHours(0, 0, 0, 0);
+        else if (preset === 'yesterday') {
+            from.setDate(from.getDate() - 1); from.setHours(0, 0, 0, 0);
+            to = new Date(from); to.setHours(23, 59, 0, 0);
+        }
+        document.getElementById('histFrom').value = toLocalInputVal(from);
+        document.getElementById('histTo').value = toLocalInputVal(to);
+
+        document.querySelectorAll('.hist-preset').forEach(b => {
+            const act = b.dataset.preset === preset;
+            b.className = act
+                ? 'hist-preset py-2 rounded-xl bg-blue-600 text-white text-xs font-extrabold active:scale-95 transition'
+                : 'hist-preset py-2 rounded-xl bg-white/90 dark:bg-slate-800 text-xs font-extrabold active:scale-95 transition';
+        });
+    }
+
+    function openHistoryModal() {
+        if (!state.selectedId || !state.objects.has(state.selectedId)) return;
+        document.getElementById('histObjName').textContent = state.objects.get(state.selectedId).name;
+        applyHistoryPreset('12h');
+        document.getElementById('actionSheetModal').classList.add('hidden');
+        document.getElementById('historyModal').classList.remove('hidden');
+    }
+
+    async function buildRouteHistory() {
+        if (!state.selectedId || !state.objects.has(state.selectedId)) return;
+        const obj = state.objects.get(state.selectedId);
+        document.getElementById('historyModal').classList.add('hidden');
+        clearTrack();
+
+        let points = [];
+        if (!state.cfg.demoMode) {
+            try {
+                const xml = await callSoap('GetObjectHistoryMobile', {
+                    userName: state.cfg.login,
+                    userPsw: state.cfg.password,
+                    obj: obj.id,
+                    fromDT: document.getElementById('histFrom').value + ':00',
+                    toDT: document.getElementById('histTo').value + ':00'
+                });
+                points = parseObjectsXml(xml).map(p => ({ lat: p.lat, lon: p.lon, speed: p.speed, time: p.time, weight: p.weight }));
+            } catch (e) {
+                logMsg(`История SOAP: ${e.message}`);
+            }
+        }
+
+        if (points.length < 2) {
+            let lat = obj.lat, lon = obj.lon;
+            const nowMs = Date.now();
+            for (let i = 0; i < 48; i++) {
+                const isLoad = (i === 10 || i === 28);
+                const isStop = (i === 18 || i === 38);
+                const tStr = new Date(nowMs - (48 - i) * 180000).toTimeString().slice(0, 8);
+                const spd = (isLoad || isStop) ? 0 : (i > 12 && i < 18 ? 48 : (i > 30 && i < 36 ? 73 : Math.floor(18 + Math.random() * 18)));
+                const wt = (i >= 10 && i < 18) || (i >= 28 && i < 38) ? 130 : 2;
+                points.push({ lat, lon, speed: spd, time: tStr, weight: wt, isLoad, isStop });
+                if (!isLoad && !isStop) {
+                    lat += (Math.sin(i * 0.24) * 0.00075) + 0.00014;
+                    lon += (Math.cos(i * 0.21) * 0.0011) - 0.00008;
+                }
+            }
+        }
+
+        state.trackPoints = points;
+        state.trackIdx = 0;
+
+        let distM = 0, maxSpd = 0, stopsCount = 0, tripsCount = 0;
+        let wasEmpty = true;
+        const allBounds = [];
+
+        for (let i = 0; i < points.length; i++) {
+            const p = points[i];
+            allBounds.push([p.lat, p.lon]);
+            if (p.speed > maxSpd) maxSpd = p.speed;
+
+            // Трёхуровневый учёт рейсов по весу (<=35 -> >=100 т)
+            if (p.weight <= 35) wasEmpty = true;
+            if (wasEmpty && (p.weight >= 100 || p.isLoad)) {
+                tripsCount++;
+                wasEmpty = false;
+                const lm = L.circleMarker([p.lat, p.lon], {
+                    radius: 7, color: '#ffffff', weight: 2, fillColor: '#EA580C', fillOpacity: 1
+                }).bindTooltip(`⛏️ Погрузка #${tripsCount} · ${p.time}`).addTo(map);
+                state.trackStopMarkers.push(lm);
+            }
+
+            if (i > 0) {
+                const prev = points[i - 1];
+                distM += distMeters(prev.lat, prev.lon, p.lat, p.lon);
+                const segColor = p.speed > 70 ? '#EF4444' : (p.speed >= 40 ? '#F97316' : '#10B981');
+                const seg = L.polyline([[prev.lat, prev.lon], [p.lat, p.lon]], {
+                    color: segColor, weight: 5, opacity: 0.92, renderer: canvasRenderer
+                }).addTo(map);
+                state.trackLayers.push(seg);
+            }
+
+            if (p.isStop || (p.speed === 0 && !p.isLoad)) {
+                stopsCount++;
+                const sm = L.circleMarker([p.lat, p.lon], {
+                    radius: 6, color: '#ffffff', weight: 2, fillColor: '#F59E0B', fillOpacity: 1
+                }).bindTooltip(`🅿️ Стоянка · ${p.time}`).addTo(map);
+                state.trackStopMarkers.push(sm);
+            }
+        }
+
+        const startM = L.circleMarker([points[0].lat, points[0].lon], {
+            radius: 7, color: '#ffffff', weight: 2, fillColor: '#16A34A', fillOpacity: 1
+        }).bindTooltip(`🟢 Старт · ${points[0].time}`).addTo(map);
+        const endP = points[points.length - 1];
+        const endM = L.circleMarker([endP.lat, endP.lon], {
+            radius: 7, color: '#ffffff', weight: 2, fillColor: '#DC2626', fillOpacity: 1
+        }).bindTooltip(`🏁 Финиш · ${endP.time}`).addTo(map);
+        state.trackLayers.push(startM, endM);
+
+        state.trackPlayMarker = L.circleMarker([points[0].lat, points[0].lon], {
+            radius: 9, color: '#ffffff', weight: 3, fillColor: '#2563EB', fillOpacity: 1
+        }).addTo(map);
+
+        map.fitBounds(L.latLngBounds(allBounds).pad(0.22));
+        selectObject(null);
+
+        document.getElementById('trackTitle').textContent = `Маршрут: ${obj.name}`;
+        document.getElementById('trackStats').textContent = `${points.length} точек · Пауза фоновых обновлений`;
+        document.getElementById('trStatDist').textContent = `${(distM / 1000).toFixed(1)} км`;
+        document.getElementById('trStatTrips').textContent = String(tripsCount);
+        document.getElementById('trStatMax').textContent = `${maxSpd} км/ч`;
+        document.getElementById('trStatStops').textContent = String(stopsCount);
+
+        const slider = document.getElementById('trackSlider');
+        slider.max = points.length - 1;
+        slider.value = 0;
+        updateTrackPlaybackFrame(0);
+        document.getElementById('trackPlaybackBar').classList.remove('hidden');
+        showToast(`Маршрут построен (${points.length} точек)`);
+    }
+
+    function updateTrackPlaybackFrame(idx) {
+        if (!state.trackPoints.length) return;
+        state.trackIdx = Math.max(0, Math.min(state.trackPoints.length - 1, idx));
+        const p = state.trackPoints[state.trackIdx];
+        document.getElementById('trackSlider').value = state.trackIdx;
+        document.getElementById('trackCurrTime').textContent = p.time;
+        document.getElementById('trackCurrSpeed').textContent = `${p.speed} км/ч`;
+        if (state.trackPlayMarker) state.trackPlayMarker.setLatLng([p.lat, p.lon]);
+        if (state.trackFollow && map) map.panTo([p.lat, p.lon], { animate: true });
+    }
+
+    function toggleTrackPlay() {
+        const btn = document.getElementById('btnTrackPlay');
+        if (state.trackTimer) {
+            clearInterval(state.trackTimer);
+            state.trackTimer = null;
+            btn.textContent = '▶';
+            return;
+        }
+        if (state.trackIdx >= state.trackPoints.length - 1) state.trackIdx = 0;
+        btn.textContent = '⏸';
+        state.trackTimer = setInterval(() => {
+            if (state.trackIdx >= state.trackPoints.length - 1) { toggleTrackPlay(); return; }
+            updateTrackPlaybackFrame(state.trackIdx + 1);
+        }, Math.round(450 / state.trackSpeedMult));
+    }
+
+    function clearTrack() {
+        if (state.trackTimer) { clearInterval(state.trackTimer); state.trackTimer = null; }
+        state.trackLayers.forEach(l => map.removeLayer(l));
+        state.trackLayers = [];
+        if (state.trackPlayMarker) { map.removeLayer(state.trackPlayMarker); state.trackPlayMarker = null; }
+        state.trackStopMarkers.forEach(m => map.removeLayer(m));
+        state.trackStopMarkers = [];
+        state.trackPoints = [];
+        document.getElementById('btnTrackPlay').textContent = '▶';
+        document.getElementById('trackPlaybackBar').classList.add('hidden');
+    }
+
+    // --- Подробная информация и датчики ---
+    window.openInfoSheet = async function() {
+        if (!state.selectedId || !state.objects.has(state.selectedId)) return;
+        const obj = state.objects.get(state.selectedId);
+        document.getElementById('actionSheetModal').classList.add('hidden');
+
+        document.getElementById('infoEmoji').textContent = VEHICLE_EMOJI[obj.type] || '🚗';
+        document.getElementById('infoTitle').textContent = obj.name;
+        document.getElementById('infoSub').textContent = `ID: ${obj.id} · ${obj.online ? 'На связи' : 'Нет связи'}`;
+        document.getElementById('infoFuel').textContent = obj.fuel;
+        document.getElementById('infoWeight').textContent = `${obj.weight} т`;
+        document.getElementById('infoDynWeight').textContent = `дин. ${obj.dynWeight || 0}`;
+        document.getElementById('infoSpeed').textContent = `${obj.speed} км/ч`;
+
+        const mainRows = [
+            ['Название', obj.name],
+            ['ID объекта', obj.id],
+            ['Текущая геозона', getObjectZoneName(obj)],
+            ['Статус', obj.massOff ? 'Выключена масса' : (obj.engineOff ? 'Двигатель заглушен' : (obj.speed > 0 ? 'В движении' : 'Стоянка'))],
+            ['Скорость', `${obj.speed} км/ч`],
+            ['Курс (азимут)', `${Math.round(obj.course)}°`],
+            ['Последнее сообщение', obj.time],
+            ['Адрес', obj.address],
+            ['Координаты (Lat, Lon)', `${obj.lat.toFixed(6)}, ${obj.lon.toFixed(6)}`]
+        ];
+
+        document.getElementById('infoMainFields').innerHTML = mainRows.map(([k, v]) => `
+            <div class="py-2 flex items-start justify-between gap-3">
+                <span class="text-slate-500 dark:text-slate-400 shrink-0">${k}</span>
+                <span class="font-bold text-right break-all">${v}</span>
+            </div>
+        `).join('');
+
+        const sensors = [
+            ['Работоспособность блока ПТ', '1'],
+            ['Ошибка датчика пожаротушения', '0'],
+            ['Пожар', '0'],
+            ['Работа ДВС', obj.engineOff ? '0' : '1'],
+            ['Масса (бортсеть)', obj.massOff ? '0 (откл.)' : '24.6 В'],
+            ['Показания веса', `${obj.weight} т`],
+            ['Динамический вес', `${obj.dynWeight || 0} т`],
+            ['Инклинометр ось X', '0.4°'],
+            ['Инклинометр ось Y', '-0.2°'],
+            ['Уровень топлива (ДУТ)', `${obj.fuel} л`],
+            ['Температура ОЖ', obj.engineOff ? '22 °C' : '84 °C'],
+            ['Давление масла', obj.engineOff ? '0.0 бар' : '4.2 бар'],
+            ['Обороты ДВС', obj.engineOff ? '0 об/мин' : (obj.speed > 0 ? '1640 об/мин' : '720 об/мин')],
+            ['Положение кузова', 'Опущен'],
+            ['Моточасы', '14 826 ч'],
+            ['Спутники GPS/ГЛОНАСС', '14']
+        ];
+
+        document.getElementById('infoSensorsHeader').textContent = `Датчики (${sensors.length})`;
+        document.getElementById('infoSensorsFields').innerHTML = sensors.map(([k, v]) => `
+            <div class="py-2 flex items-center justify-between gap-3">
+                <span class="text-slate-600 dark:text-slate-300">${k}</span>
+                <span class="font-extrabold">${v}</span>
+            </div>
+        `).join('');
+
+        document.getElementById('infoSensorsModal').classList.remove('hidden');
+    };
+
+    // ==================== 16. СВАЙП ВНИЗ ДЛЯ ЗАКРЫТИЯ ШТОРОК (v17) ====================
+    function initModalSwipeDismiss() {
+        document.querySelectorAll('.modal-backdrop').forEach(modal => {
+            const sheet = modal.querySelector('.swipe-sheet');
+            const handle = modal.querySelector('.swipe-handle');
+            if (!sheet || !handle) return;
+
+            let startY = 0, currY = 0, dragging = false;
+
+            handle.addEventListener('touchstart', (e) => {
+                startY = e.touches[0].clientY;
+                dragging = true;
+                sheet.style.transition = 'none';
+            }, { passive: true });
+
+            handle.addEventListener('touchmove', (e) => {
+                if (!dragging) return;
+                currY = Math.max(0, e.touches[0].clientY - startY);
+                sheet.style.transform = `translateY(${currY}px)`;
+            }, { passive: true });
+
+            handle.addEventListener('touchend', () => {
+                if (!dragging) return;
+                dragging = false;
+                sheet.style.transition = '';
+                if (currY > 90) {
+                    modal.classList.add('hidden');
+                    sheet.style.transform = '';
+                } else {
+                    sheet.style.transform = '';
+                }
+                currY = 0;
+            });
+
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) modal.classList.add('hidden');
+            });
+        });
+    }
+
+    // ==================== 17. НАВИГАЦИЯ (DOCK), ТЕМА И НАСТРОЙКИ ====================
+    function switchTab(tabName) {
+        state.activeTab = tabName;
+        ['map', 'objects', 'settings'].forEach((t, idx) => {
+            document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== tabName);
+            if (t === tabName) {
+                const pill = document.getElementById('nav-pill');
+                if (pill) pill.style.transform = `translateX(${idx * 100}%)`;
+            }
+        });
+
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            const act = btn.dataset.tab === tabName;
+            btn.className = act
+                ? 'nav-btn relative z-10 flex flex-col items-center justify-center py-1.5 text-blue-600 dark:text-blue-400 transition'
+                : 'nav-btn relative z-10 flex flex-col items-center justify-center py-1.5 text-slate-500 dark:text-slate-400 transition';
+        });
+
+        if (tabName === 'map' && map) {
+            setTimeout(() => { map.invalidateSize(); renderVisibleMarkers(); }, 40);
+        } else if (tabName === 'objects') {
+            renderObjectsList();
+        }
+    }
+
+    function applyTheme() {
+        document.documentElement.classList.toggle('dark', Boolean(state.cfg.darkTheme));
+    }
+
+    function applyUiScale() {
+        const sc = Number(state.cfg.uiScale) || 1;
+        document.documentElement.style.fontSize = `${Math.round(16 * sc)}px`;
+    }
+
+    function syncSettingsUI() {
+        document.getElementById('cfgServer').value = state.cfg.server;
+        document.getElementById('cfgLogin').value = state.cfg.login;
+        document.getElementById('cfgPassword').value = state.cfg.password;
+        document.getElementById('setAutoRefresh').checked = state.cfg.autoRefresh;
+        document.getElementById('setSmooth').checked = state.cfg.smooth;
+        document.getElementById('setPredict').checked = state.cfg.predictMotion;
+        document.getElementById('setFollow').checked = state.cfg.followSelected;
+        document.getElementById('setLabels').checked = state.cfg.showLabels;
+        document.getElementById('setGeoZones').checked = state.cfg.showGeoZones;
+        document.getElementById('setExcZones').checked = state.cfg.showExcZones;
+        document.getElementById('setShowOffline').checked = state.cfg.showOffline;
+        document.getElementById('setDarkTheme').checked = state.cfg.darkTheme;
+        document.getElementById('setAutoLogin').checked = state.cfg.autoLogin;
+        document.getElementById('setDemoMode').checked = state.cfg.demoMode;
+
+        const highlightBtns = (selector, attr, val, isFloat = false) => {
+            document.querySelectorAll(selector).forEach(btn => {
+                const bVal = Number(btn.dataset[attr]);
+                const active = isFloat ? Math.abs(bVal - Number(val)) < 0.02 : bVal === Number(val);
+                btn.className = active
+                    ? `${selector.slice(1)} py-2 rounded-xl bg-blue-600 text-white shadow-sm transition`
+                    : `${selector.slice(1)} py-2 rounded-xl text-slate-600 dark:text-slate-300 transition`;
+            });
+        };
+
+        highlightBtns('.int-btn', 'interval', state.cfg.refreshInterval);
+        highlightBtns('.selint-btn', 'selint', state.cfg.selInterval);
+        highlightBtns('.fps-btn', 'fps', state.cfg.fps);
+        highlightBtns('.rad-btn', 'radius', state.cfg.zoneRadius);
+        highlightBtns('.scale-btn', 'scale', state.cfg.uiScale, true);
+        updateFilterDot();
+    }
+
+    // ==================== 18. ПРИВЯЗКА СОБЫТИЙ ====================
+    function bindEvents() {
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+        });
+
+        // Поиск на карте
+        const mapSearchInput = document.getElementById('mapSearchInput');
+        const mapSearchClear = document.getElementById('mapSearchClear');
+        const mapSearchDropdown = document.getElementById('mapSearchDropdown');
+
+        mapSearchInput.addEventListener('input', () => {
+            const q = mapSearchInput.value.trim().toLowerCase();
+            mapSearchClear.classList.toggle('hidden', !q);
+            if (!q) { mapSearchDropdown.classList.add('hidden'); return; }
+
+            const matches = [];
+            state.objects.forEach(o => {
+                if (o.name.toLowerCase().includes(q) && matches.length < 15) matches.push(o);
+            });
+
+            if (matches.length === 0) {
+                mapSearchDropdown.innerHTML = `<div class="p-3 text-xs text-slate-400 text-center">Ничего не найдено</div>`;
+            } else {
+                mapSearchDropdown.innerHTML = matches.map(o => `
+                    <button onclick="document.getElementById('mapSearchDropdown').classList.add('hidden'); focusObjectById('${o.id}')" class="w-full px-3.5 py-2.5 flex items-center justify-between text-left hover:bg-blue-500/10 transition">
+                        <span class="text-xs font-extrabold">${VEHICLE_EMOJI[o.type]} ${o.name}</span>
+                        <span class="text-[11px] font-bold ${o.speed > 0 ? 'text-emerald-600' : 'text-slate-400'}">${o.speed} км/ч</span>
+                    </button>
+                `).join('');
+            }
+            mapSearchDropdown.classList.remove('hidden');
+        });
+
+        mapSearchClear.addEventListener('click', () => {
+            mapSearchInput.value = '';
+            mapSearchClear.classList.add('hidden');
+            mapSearchDropdown.classList.add('hidden');
+        });
+
+        // Кнопки карты
+        document.getElementById('btnRefresh').addEventListener('click', () => fetchObjects(true));
+        document.getElementById('btnOnlineBadge').addEventListener('click', openFleetSummaryModal);
+        document.getElementById('btnSummaryClose').addEventListener('click', () => document.getElementById('fleetSummaryModal').classList.add('hidden'));
+
+        document.getElementById('btnToggleLayer').addEventListener('click', () => {
+            state.cfg.satellite = !state.cfg.satellite;
+            saveConfig();
+            applyMapLayer();
+        });
+
+        document.getElementById('btnMapFilter').addEventListener('click', openMapFilterModal);
+        document.getElementById('btnObjFilterModal').addEventListener('click', openMapFilterModal);
+        document.getElementById('btnMapFilterClose').addEventListener('click', () => document.getElementById('mapFilterModal').classList.add('hidden'));
+        document.getElementById('btnFilterSelectAll').addEventListener('click', () => {
+            Object.keys(state.cfg.mapTypeFilter).forEach(k => state.cfg.mapTypeFilter[k] = true);
+            saveConfig(); openMapFilterModal(); updateFilterDot(); renderVisibleMarkers();
+            if (state.activeTab === 'objects') renderObjectsList();
+        });
+        document.getElementById('btnFilterResetOnlyBelaz').addEventListener('click', () => {
+            Object.keys(state.cfg.mapTypeFilter).forEach(k => state.cfg.mapTypeFilter[k] = (k === 'belaz' || k === 'excavator'));
+            saveConfig(); openMapFilterModal(); updateFilterDot(); renderVisibleMarkers();
+            if (state.activeTab === 'objects') renderObjectsList();
+        });
+
+        document.getElementById('btnFitAll').addEventListener('click', () => {
+            const pts = [];
+            state.objects.forEach(o => { if (o.online && isTypeVisible(o.type)) pts.push([o.lat, o.lon]); });
+            if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.12));
+        });
+
+        document.getElementById('btnMyLoc').addEventListener('click', () => {
+            if (!navigator.geolocation) { showToast('Геолокация недоступна'); return; }
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const ll = [pos.coords.latitude, pos.coords.longitude];
+                    state.userLatLng = ll;
+                    if (state.userMarker) state.userMarker.setLatLng(ll);
+                    else {
+                        state.userMarker = L.circleMarker(ll, {
+                            radius: 8, color: '#ffffff', weight: 3, fillColor: '#2563EB', fillOpacity: 1
+                        }).addTo(map);
+                    }
+                    map.setView(ll, 16, { animate: true });
+                },
+                () => showToast('Не удалось определить GPS-позицию')
+            );
+        });
+
+        // Конструктор зон
+        document.getElementById('btnQuickZones').addEventListener('click', () => {
+            if (state.drawingZone) finishZoneDrawing(false);
+            else startZoneDrawing();
+        });
+        document.getElementById('btnZoneModeCircle').addEventListener('click', () => setZoneDrawMode('circle'));
+        document.getElementById('btnZoneModePoly').addEventListener('click', () => setZoneDrawMode('polygon'));
+        document.getElementById('zoneRadiusSlider').addEventListener('input', (e) => {
+            state.zoneDrawRadius = Number(e.target.value);
+            document.getElementById('zoneRadiusVal').textContent = `${state.zoneDrawRadius} м`;
+            updateZoneDrawPreview();
+        });
+        document.querySelectorAll('.z-color').forEach(btn => {
+            btn.addEventListener('click', () => {
+                state.zoneDrawColor = btn.dataset.color;
+                document.querySelectorAll('.z-color').forEach(b => b.classList.remove('ring-2', 'ring-offset-1', 'ring-slate-900', 'dark:ring-white'));
+                btn.classList.add('ring-2', 'ring-offset-1', 'ring-slate-900', 'dark:ring-white');
+                updateZoneDrawPreview();
+            });
+        });
+        document.getElementById('btnZoneUndo').addEventListener('click', () => {
+            if (state.drawPoints.length > 0) {
+                state.drawPoints.pop();
+                document.getElementById('zonePtsCount').textContent = `Точек: ${state.drawPoints.length}`;
+                updateZoneDrawPreview();
+            }
+        });
+        document.getElementById('btnZoneSave').addEventListener('click', () => finishZoneDrawing(true));
+        document.getElementById('btnZoneCancel').addEventListener('click', () => finishZoneDrawing(false));
+
+        // Редактирование пользовательской зоны
+        document.getElementById('btnZoneInfoClose').addEventListener('click', () => document.getElementById('zoneInfoModal').classList.add('hidden'));
+        document.getElementById('btnZoneRenameSave').addEventListener('click', () => {
+            const z = (state.cfg.customZones || []).find(item => item.id === state.activeEditZoneId);
+            const newName = document.getElementById('zoneRenameInput').value.trim();
+            if (z && newName) {
+                z.name = newName;
+                saveConfig(); renderCustomZones(); renderFavoritesStrip();
+                document.getElementById('zoneInfoTitle').textContent = `📌 ${newName}`;
+                showToast('Зона переименована');
+            }
+        });
+        document.getElementById('btnZoneDelete').addEventListener('click', () => {
+            state.cfg.customZones = (state.cfg.customZones || []).filter(item => item.id !== state.activeEditZoneId);
+            saveConfig(); renderCustomZones(); updateZonePresence(); renderFavoritesStrip();
+            document.getElementById('zoneInfoModal').classList.add('hidden');
+            showToast('Зона удалена');
+        });
+
+        // Плеер маршрута
+        document.getElementById('btnTrackFollow').addEventListener('click', () => {
+            state.trackFollow = !state.trackFollow;
+            document.getElementById('btnTrackFollow').className = state.trackFollow
+                ? 'w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs shadow active:scale-90 transition'
+                : 'w-8 h-8 rounded-full bg-slate-200/85 dark:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center text-xs active:scale-90 transition';
+        });
+        document.getElementById('btnTrackPlay').addEventListener('click', toggleTrackPlay);
+        document.getElementById('btnTrackSpeed').addEventListener('click', () => {
+            const speeds = [1, 2, 5, 10];
+            state.trackSpeedMult = speeds[(speeds.indexOf(state.trackSpeedMult) + 1) % speeds.length];
+            document.getElementById('btnTrackSpeed').textContent = `${state.trackSpeedMult}x`;
+            if (state.trackTimer) { toggleTrackPlay(); toggleTrackPlay(); }
+        });
+        document.getElementById('btnTrackClose').addEventListener('click', clearTrack);
+        document.getElementById('trackSlider').addEventListener('input', e => updateTrackPlaybackFrame(Number(e.target.value)));
+
+        // Нижняя карточка выбранного объекта
+        document.getElementById('btnCardClose').addEventListener('click', () => selectObject(null));
+        document.getElementById('btnCardMenu').addEventListener('click', openActionSheet);
+        document.getElementById('btnCardExcQueue').addEventListener('click', () => {
+            if (state.selectedId && state.objects.has(state.selectedId)) {
+                openZoneInfoModal({ centerObj: state.objects.get(state.selectedId) });
+            }
+        });
+        document.getElementById('btnCardFollow').addEventListener('click', () => {
+            state.cfg.followSelected = !state.cfg.followSelected;
+            state.followPausedUntil = 0;
+            saveConfig(); syncSettingsUI();
+            if (state.selectedId && state.objects.has(state.selectedId)) updateSelectedCard(state.objects.get(state.selectedId));
+            showToast(state.cfg.followSelected ? 'Слежение включено' : 'Слежение отключено');
+        });
+
+        const toggleFavoriteSelected = () => {
+            if (!state.selectedId || !state.objects.has(state.selectedId)) return;
+            const obj = state.objects.get(state.selectedId);
+            const idx = state.cfg.favorites.indexOf(obj.name);
+            if (idx >= 0) { state.cfg.favorites.splice(idx, 1); showToast(`Убрано из избранного: ${obj.name}`); }
+            else { state.cfg.favorites.push(obj.name); showToast(`В избранном: ${obj.name}`); }
+            saveConfig();
+            updateSelectedCard(obj);
+            renderFavoritesStrip();
+            renderVisibleMarkers();
+        };
+        document.getElementById('btnCardFav').addEventListener('click', toggleFavoriteSelected);
+        document.getElementById('btnActFav').addEventListener('click', () => {
+            toggleFavoriteSelected();
+            if (state.selectedId && state.objects.has(state.selectedId)) {
+                document.getElementById('btnActFav').textContent = state.cfg.favorites.includes(state.objects.get(state.selectedId).name) ? '★' : '☆';
+            }
+        });
+
+        // Шторки действий, истории, датчиков
+        document.getElementById('btnActClose').addEventListener('click', () => document.getElementById('actionSheetModal').classList.add('hidden'));
+        document.getElementById('btnActHistory').addEventListener('click', openHistoryModal);
+        document.getElementById('btnActInfo').addEventListener('click', openInfoSheet);
+        document.getElementById('btnActCopyCoords').addEventListener('click', () => {
+            copyTextToClipboard(document.getElementById('actSheetCoords').textContent);
+            document.getElementById('actionSheetModal').classList.add('hidden');
+        });
+        document.getElementById('btnHistClose').addEventListener('click', () => document.getElementById('historyModal').classList.add('hidden'));
+        document.querySelectorAll('.hist-preset').forEach(btn => btn.addEventListener('click', () => applyHistoryPreset(btn.dataset.preset)));
+        document.getElementById('btnBuildTrack').addEventListener('click', buildRouteHistory);
+        document.getElementById('btnInfoClose').addEventListener('click', () => document.getElementById('infoSensorsModal').classList.add('hidden'));
+
+        // Фильтры «Объекты»
+        document.getElementById('objSearchInput').addEventListener('input', () => { state.objListLimit = 120; renderObjectsList(); });
+        document.querySelectorAll('.type-filter').forEach(btn => {
+            btn.addEventListener('click', () => {
+                state.typeFilter = btn.dataset.type;
+                document.querySelectorAll('.type-filter').forEach(b => {
+                    b.className = b.dataset.type === state.typeFilter
+                        ? 'type-filter shrink-0 px-3 py-1.5 rounded-full bg-blue-600 text-white transition'
+                        : 'type-filter shrink-0 px-3 py-1.5 rounded-full bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition';
+                });
+                state.objListLimit = 120; renderObjectsList();
+            });
+        });
+        document.querySelectorAll('.conn-filter').forEach(btn => {
+            btn.addEventListener('click', () => {
+                state.connFilter = btn.dataset.conn;
+                document.querySelectorAll('.conn-filter').forEach(b => {
+                    b.className = b.dataset.conn === state.connFilter
+                        ? 'conn-filter py-1.5 rounded-lg bg-blue-600 text-white transition'
+                        : 'conn-filter py-1.5 rounded-lg text-slate-600 dark:text-slate-300 transition';
+                });
+                state.objListLimit = 120; renderObjectsList();
+            });
+        });
+        document.querySelectorAll('.act-filter').forEach(btn => {
+            btn.addEventListener('click', () => {
+                state.actFilter = btn.dataset.act;
+                document.querySelectorAll('.act-filter').forEach(b => {
+                    b.className = b.dataset.act === state.actFilter
+                        ? 'act-filter py-1.5 rounded-lg bg-blue-600 text-white transition'
+                        : 'act-filter py-1.5 rounded-lg text-slate-600 dark:text-slate-300 transition';
+                });
+                state.objListLimit = 120; renderObjectsList();
+            });
+        });
+
+        // Настройки
+        document.getElementById('btnConnect').addEventListener('click', () => {
+            state.cfg.server = document.getElementById('cfgServer').value.trim();
+            state.cfg.login = document.getElementById('cfgLogin').value.trim();
+            state.cfg.password = document.getElementById('cfgPassword').value;
+            state.cfg.demoMode = false;
+            document.getElementById('setDemoMode').checked = false;
+            saveConfig();
+            switchTab('map');
+            fetchObjects(true);
+            restartAutoRefresh();
+        });
+
+        document.getElementById('setAutoRefresh').addEventListener('change', (e) => { state.cfg.autoRefresh = e.target.checked; saveConfig(); restartAutoRefresh(); });
+        document.querySelectorAll('.int-btn').forEach(btn => btn.addEventListener('click', () => { state.cfg.refreshInterval = Number(btn.dataset.interval); saveConfig(); syncSettingsUI(); restartAutoRefresh(); }));
+        document.querySelectorAll('.selint-btn').forEach(btn => btn.addEventListener('click', () => { state.cfg.selInterval = Number(btn.dataset.selint); saveConfig(); syncSettingsUI(); restartAutoRefresh(); }));
+        document.querySelectorAll('.fps-btn').forEach(btn => btn.addEventListener('click', () => { state.cfg.fps = Number(btn.dataset.fps); saveConfig(); syncSettingsUI(); showToast(`Анимация: ${state.cfg.fps} к/с`); }));
+        document.getElementById('setSmooth').addEventListener('change', (e) => { state.cfg.smooth = e.target.checked; saveConfig(); });
+        document.getElementById('setPredict').addEventListener('change', (e) => { state.cfg.predictMotion = e.target.checked; saveConfig(); });
+        document.getElementById('setFollow').addEventListener('change', (e) => { state.cfg.followSelected = e.target.checked; saveConfig(); });
+        document.getElementById('setLabels').addEventListener('change', (e) => { state.cfg.showLabels = e.target.checked; saveConfig(); renderVisibleMarkers(); });
+        document.getElementById('setGeoZones').addEventListener('change', (e) => { state.cfg.showGeoZones = e.target.checked; saveConfig(); showToast(e.target.checked ? 'Геозоны включены' : 'Геозоны скрыты'); });
+        document.getElementById('setExcZones').addEventListener('change', (e) => { state.cfg.showExcZones = e.target.checked; saveConfig(); renderVisibleMarkers(); });
+        document.querySelectorAll('.rad-btn').forEach(btn => btn.addEventListener('click', () => { state.cfg.zoneRadius = Number(btn.dataset.radius); saveConfig(); syncSettingsUI(); updateZonePresence(); renderVisibleMarkers(); renderFavoritesStrip(); }));
+        document.querySelectorAll('.scale-btn').forEach(btn => btn.addEventListener('click', () => { state.cfg.uiScale = Number(btn.dataset.scale); saveConfig(); applyUiScale(); syncSettingsUI(); showToast(`Масштаб: ${Math.round(state.cfg.uiScale * 100)}%`); }));
+        document.getElementById('setShowOffline').addEventListener('change', (e) => { state.cfg.showOffline = e.target.checked; saveConfig(); renderVisibleMarkers(); });
+        document.getElementById('setDarkTheme').addEventListener('change', (e) => { state.cfg.darkTheme = e.target.checked; saveConfig(); applyTheme(); });
+        document.getElementById('setAutoLogin').addEventListener('change', (e) => { state.cfg.autoLogin = e.target.checked; saveConfig(); });
+        document.getElementById('setDemoMode').addEventListener('change', (e) => { state.cfg.demoMode = e.target.checked; saveConfig(); state.objects.clear(); fetchObjects(true); });
+        document.getElementById('btnCopyLogs').addEventListener('click', () => copyTextToClipboard(state.logs.join('\n')));
+    }
+
+    // ==================== 19. КОЛЛБЭКИ НАТИВНОГО ANDROID-МОСТА ====================
+    window.onNativeLocationResult = function(res) {
+        if (res && res.ok && res.lat != null && res.lng != null) {
+            state.userLatLng = [res.lat, res.lng];
+            if (state.userMarker) state.userMarker.setLatLng(state.userLatLng);
+            else {
+                state.userMarker = L.circleMarker(state.userLatLng, {
+                    radius: 8, color: '#ffffff', weight: 3, fillColor: '#2563EB', fillOpacity: 1
+                }).addTo(map);
+            }
+            map.setView(state.userLatLng, 16, { animate: true });
+        }
+    };
+
+    // ==================== 20. ЗАПУСК ПРИЛОЖЕНИЯ ====================
+    window.onload = function() {
+        applyTheme();
+        applyUiScale();
+        syncSettingsUI();
+        initMap();
+        bindEvents();
+        initModalSwipeDismiss();
+
+        logMsg('Кузбассразрезуголь · Спутник.Mobile v17 готов');
+        logMsg(`Сервер: ${state.cfg.server}`);
+        logMsg(`Логин: ${state.cfg.login}`);
+
+        if (state.cfg.autoLogin) {
+            switchTab('map');
+            fetchObjects(true);
+            restartAutoRefresh();
+        } else {
+            switchTab('settings');
+        }
+
+        requestAnimationFrame(animationLoop);
+    };
+    </script>
+</body>
+</html>
